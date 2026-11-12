@@ -13,6 +13,7 @@
 | `.agents/sources.md` | 官方接口、版本来源、字段含义 | 需要查版本/下载地址时 |
 | `.agents/workflow.md` | 打包与发布的标准流程 | 要打包时 |
 | `.agents/checklist.md` | 产物验收清单 | **打包结束后必须逐项过** |
+| `.agents/research-lessons.md` | 原生 Linux/逆向调研的方法论与教训（工具链、判断纪律、可行性切分） | 做原生化/逆向/可行性调研时 |
 
 ---
 

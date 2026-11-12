@@ -278,3 +278,306 @@
   4K 原盘想不卡只有两条：① 客户端切 NAS 转码档（解 1080p H.264）；
   ② 抓 `/splay/<token>/<file>` 流给 Linux 原生播放器走 VA-API
   （实测同一片源：软解 5.14s CPU/5s vs VA-API 3.58s，且原生播放无回读开销）。
+
+## 2026-11-12 在新检出位置重打 2.46.2026101501-6
+
+- 背景：仓库迁到 `/home/cja/mycode/zspace-wine`（旧 `~/Desktop/zspace-wine`）。
+  fresh checkout 的 `packages/`、`build/` 为空（物料不进 git）。官方仍 V2.46.2026101501
+  （`STATUS=no-package`），用户批准下载后重打。
+- 决定/结论：
+  - 下载官方包 337291072 字节（MZ 头 + 体积与接口 `package_size` 相符）。
+  - 用 `--rev 6`（**非默认 1**）：当前启动器代码 = 已记录的 -6 状态
+    （git HEAD `91084c7` 代理修复，其后无启动器改动）。按 workflow §5，
+    同官方版本下代码未变不应回退修订号到 1（1 对应旧的非可移植依赖）。
+  - 产物 `build/com.zspace.spark_2.46.2026101501-6_amd64.deb`（309.8 MB / 324796848 字节）
+  - SHA256 `07de921c335391df847aa77369f5193e536c68023739b526a579b5a6bf8f3842`
+  - 源包 `packages/zspace_windows_2.46.2026101501_101619.exe`
+  - SHA 与旧 -6 记录（`ce80abf8…`）不同：**deb 非字节可复现**（mtime/条目排序/Installed-Size），
+    代码与官方二进制相同，功能等价。
+- 验收（对**包内**文件 + 活体容器/CDP 实测，不是只看源码）：
+  - A1–A10 全过；B1/B2/B6/B7 全过；E1–E5 全过
+    （E5 `selftest_wineserver.sh` 5/5；E3 功能：`WINE=不存在` → 明确报错 exit 1）。
+  - B3/B4/B8：活体容器 `fontconfig.conf` 含 `zc-fontconf-v3`；`system.reg`
+    `wqy-microhei`=0、`NotoSansSC`=0；`fonts/` 681 个、无 `NotoSansSC-VF.ttf`。
+  - B5：CDP `CSS.getPlatformFontsForNode` 登录页正文 = `Microsoft YaHei`（非 Thin 可变字体）→ 过。
+  - F1：包内 run.sh 三段式开关在位，活体进程 cmdline 确认。
+  - F2：注入固定负载 180 帧 = 681fps / p95 3ms / 0 帧>33ms → 过。
+  - F3：**真 idle（窗口隐藏、无调试器）3 次中位 2.4% → 过**；
+    可见登录页持续绘制时 ~15–17%（不限帧的已知取舍，见 -4），非打包回归。
+  - F4：截图登录页中文清晰、无黑块/花屏 → 过。
+  - C1/C2/C3 需 root/用户装机确认；E6 需非 Deepin 容器，未做。
+- 偏差：`--rev 6`（理由如上）；F3 区分「可见绘制」与「真 idle」两种口径；
+  B5 在登录页测得 Microsoft YaHei（主界面此前为 Noto Sans CJK SC，均属合格）。
+- 影响：新位置产物与旧 -6 功能等价；后续在此位置沿用同链路。
+
+### 本次新增的可复用教训
+
+1. **F3 空闲 CPU 必须区分口径**：窗口可见且页面有持续绘制时，不限帧会让 CPU 到 ~15%；
+   窗口隐藏（托盘）不绘制时才 ~2%。测「空闲」要把窗口隐藏/最小化，否则量到的是「可见绘制」。
+2. **CDP `/json` 在窗口隐藏时返回 `[]`**：这恰好是「调试器已脱离、真 idle」的状态，
+   适合接着采 F3；不要误判成应用崩了（`CrBrowserMain` 仍活着）。
+3. **deb 不字节可复现**：同代码同官方包重打，SHA 也会变。比对产物要看「代码状态 + 官方包」，
+   不能拿 SHA 相等当「同一产物」的判据。
+
+## 2026-11-12 调研：不用 Wine 原生运行的可行性（结论：完整原生被闭源 SDK 卡死）
+
+- 背景：用户问能否不走 Wine 让极空间在 Linux 原生运行。解剖了官方 exe
+  （NSIS → app-64.7z → app.asar，26.7 MB + unpacked 562 MB），并做了外部调研。
+- 决定/结论：
+  - **路线 A（Linux Electron 重打包）不可行**，致命阻塞是闭源核心库 **libzrpc**
+    （设备发现/登录链路/本地 13579 代理全走它，ffi-napi 加载，
+    只有 `libzrpc_x64.dll` 与 mac 的 `libzrpc.dylib`，**没有 Linux .so**）。
+    播放器 UZPlayer（Qt6+VLC+playsdk）、同步 ZSpaceSync、挂载 ZSpaceMount
+    也全是闭源 win/mac 二进制，无 Linux 版。这些不是「重编 .node」能解决的，
+    只有官方出 Linux 构建才能解锁（mac 版证明官方有能力移植）。
+  - **路线 B（官方网页版原生封装）可行**：官方网页版 `zconnect.cn`（远程）或
+    局域网 `NAS_IP:5055`，用原生 Electron/浏览器壳包一层即可，无 Wine、无闭源二进制、
+    授权上最干净。代价：没有文档同步、挂载盘、手机备份、原生播放器。
+  - 官方无 Linux 桌面客户端（下载页实抓确认）；社区无 asar 重打包项目
+    （GitHub/Gitee 搜索均 0 命中）；官方「极空间 Skill」CLI 已支持 Linux（管理工具，非 GUI）。
+- 证据（包解剖）：
+  - Electron **33.3.1** / Chromium 130（exe 内 UA 字符串）。
+  - JS 侧原生模块反而不是问题：`@lwahonen/ffi-napi`、`ref-napi` **asar 里自带
+    linux-x64/arm64 prebuilds**；sqlite3 只有 win32 binding，但 napi-v6 有官方
+    linux 预编译可直接补，无需编译。
+  - `background.js`（5.5 MB webpack）里 "linux" 22 处全来自 systeminformation
+    等第三方库；应用自身只有 win32/darwin 分支。
+  - `ue="darwin"==process.platform?"libzrpc.dylib":"libzrpc_x64.dll"` —— linux 会
+    落到 dll 分支，dlopen 必失败；`startWebProxy`/`searchDevice`/`get_nas_status`
+    全经由该库，无降级路径。
+  - ZSpaceMount.exe 字符串含 rclone/fuse/WinFsp/macFUSE（Go+rclone 魔改）；
+    ZSpaceSync.exe 是 Go 二进制（syncthing 系，8384 端口）。
+  - zsviewer 是 PDFNet **WASM**，跨平台；渲染层是普通 Vue web 应用。
+  - 随包开源工具（adb/scrcpy、rclone、librespeed-cli）有 Linux 版可换，但调用路径要改 JS。
+- 影响：本项目继续走 Wine 包装（完整功能）；若用户要「原生」，推荐路线 B 另起炉灶
+  （与现有 deb 并存），不要投入路线 A 的逆向/仿制（违反本项目「不修改不破解」口径，
+  且 EULA 风险）。临时解包目录 build/research-native 已清理。
+
+## 2026-11-12 REA/craft-anything 逆向迁移评估（分支 research/linux-native-re，仅报告未实施）
+
+- 背景：用户问能否用 REA（github.com/morluto/rea）+ craft-anything 把闭源库
+  逆向迁移到 Linux。拉分支 `research/linux-native-re`，报告在仓库根
+  `REPORT-linux-native-re.md`。**未安装/运行任何逆向工具，未改官方二进制。**
+- 决定/结论：
+  - 完整移植 libzrpc 不现实；**LAN-only 薄壳（R2）有条件可行**，估 4~8 周、
+    成功率 50~70%，生死判据 = 局域网发现/握手是否私有加密（Phase 0 判定）。
+  - 工具选 REA（MIT、MCP、Electron/Go/PE/抓包全对口）；craft-anything 是
+    alpha 且比对环节为网站/游戏设计，不装。REA 需 Node≥24.22.1（本机 npx
+    默认 24.21.0，接入前要升）。
+  - R2 与 AGENTS.md「不修改不破解不替换」及星火红线**直接冲突**：做之前必须
+    用户拍板改口径，产物仅个人使用、不得投稿/分发。官方 EULA 未核对，开工前必查。
+  - 性价比最高仍是向官方要 Linux .so（栈全跨平台，mac dylib 已在）。
+- 证据（本次取证，解包后 objdump/strings 实测）：
+  - libzrpc_x64.dll：13.25 MB，MinGW C++（GNU 节布局），stripped，
+    .pdata≈**40,753 函数**；静态链接 Asio/OpenSSL/protobuf C++/KCP/uTP/
+    STUN/TURN/curl；私有 proto `message.tp/tls.proto`、145 个 PEM；
+    20 个 libzrpc_* 导出，**ffi 签名表在 background.js 里全可见**。
+  - ZSpaceSync.exe：43.4 MB，**Go 1.22.12 的 syncthing fork**（+quic-go）；
+    ZSpaceMount.exe 24.5 MB Go+rclone；playsdk.dll 仅 119 KB（Qt6→libvlc 桥）；
+    uzplayer 全目录 263 MB。
+  - REA showcase 量级 = 单函数重建（DX-Ball 63 字节函数），无大型网络栈重写先例。
+- 影响：后续若启动，只做 Phase 0（纯观察：FFI 契约书 + Wine 容器抓包），
+  再决定是否进 Phase 1。临时目录 build/research-re 已清理。
+
+## 2026-11-12 用户决定：research 分支豁免「不修改不破解不替换」口径
+
+- 背景：用户看完 REA 评估后追问「全量移植有什么问题」，并明确
+  `research/linux-native-re` 分支不受 AGENTS.md「不修改、不破解、不替换
+  官方二进制」约束。
+- 决定/结论：
+  - 口径豁免**仅限本分支**；master 的 Wine 打包链路仍守原口径。
+  - 星火商店「不得改动官方二进制」是商店规则，不随项目口径豁免，
+    本分支产物仍不得投稿；外部 EULA/版权风险仍在，个人使用为宜。
+  - 全量移植（R1）的技术判定不变：杀手是 libzrpc 远程 P2P 要与
+    云端调度 + NAS 固件两个闭源对端对齐，私有握手/PKI、无测试预言机、
+    永久维护债。报告 §3.1 已展开，§5 新增「2~3 天可行性尖峰」选项
+    （提 proto schema / 抓 dispatch 通道 / 测私有函数占比）。
+- 影响：REPORT-linux-native-re.md 已同步更新（头部口径声明、§0 表、
+  §3.1、§4.1、§5）。等用户决定是否做尖峰或 Phase 0。
+
+## 2026-11-12 libzrpc 闭源核验 + JS↔DLL 边界完全透明（R2 大幅降险）
+
+- 背景：用户追问 libzrpc 是否闭源、作用、能否用 Rust 按需重写。
+- 决定/结论：
+  - 闭源核验通过：PE 无版本资源/版权串，全库唯一 URL 是 protobuf 自带
+    描述符路径；网上同名「zRPC」是 go-zero 的 Go 组件，无关。自研闭源，高置信。
+  - 作用 = 客户端连接引擎：设备发现、选路（LAN 直连/P2P/中继）、
+    13579 本地代理、状态诊断。UI 一切请求经它。
+  - **JS↔DLL 边界零逆向成本**（全部从 background.js 读出）：
+    init 入参纯 JSON；start_service 明文 = {local_port, remote_port:5055,
+    type:1, nas_id, ts}，JS 侧 AES-256-GCM；密钥 = MT19937(固定种子
+    4728423)×64 拼接→SHA-256 hex，key=[0:32] iv=[0:16]，确定性可复现；
+    返回普通 JSON；search_device 返回 {data:[{nas_id,...}]}。
+  - 用户思路「Rust 按需重写、能替则替、用不到就砍」= R2 正确打法；
+    唯一真实未知 = LAN 设备发现的 UDP 格式与代理是否附加鉴权头。
+- 影响：R2 估时维持 4~8 周但置信度上升；报告 §2.1 已补「边界透明」节。
+  下一步仍是 Phase 0 观察（Wine 容器抓包）定生死。
+
+## 2026-11-12 播放器选型定为原生 libvlc（用户提议，取证支持）
+
+- 背景：用户质疑「为什么用 mpv 而不和原版一样用 VLC」。
+- 决定/结论：播放器引擎**默认 libvlc**，mpv 降为备选。取证：官方
+  UZPlayer bundled **VLC 4.0.0-dev（git eee47c59a9，Otto Chriek）**，
+  Windows 包 VA-API 插件 0 命中（与 Wine 无硬解结论互证）。
+  理由：同引擎格式兼容不赌、C API 直接链接（libvlc-sys）比起 mpv 子进程
+  +JSON IPC 更简、可编译官方同 commit 精确对齐、LGPL 干净（libmpv GPL 传染）。
+  版本两选：① 同 commit 4.0.0-dev（功能对齐，含全景视频等新特性）
+  ② 发行版 3.0 稳定（省事）。硬解两者都有 VA-API，非 mpv 优势。
+- 影响：报告 §2.2 表与 §3.2 Phase 2 已改 libvlc 默认。不变的工作量：
+  应用↔播放器控制协议（playsdk/IPC）仍需观测复现，播放器窗口 UI 需重做。
+
+## 2026-11-12 远程访问定性修正：放弃的是协议重写，功能可经自建隧道承接
+
+- 背景：用户追问「远程为什么架构性放弃」。
+- 决定/结论：
+  - 放弃的准确对象 = 重写官方私有远程协议（dispatch 注册/打洞/隧道/中继，
+    对端闭源云+NAS 固件，可能设备校验、随时改协议）——分布式协议对齐问题，
+    非工作量问题，Rust 重写不解决。
+  - **远程功能本身可不丢**：NAS 端 Docker 装 Tailscale（极空间有社区教程，
+    x86 Docker 型号可行）+ 客户端组网 → 远程变虚拟局域网 → LAN 薄壳直连
+    100.x 虚拟 IP，零逆向。官方 P2P/中继本质是托管隧道服务，自建即绕过。
+  - 前提：确认用户 NAS 型号支持 Docker；兜底 zconnect 网页/Wine。
+- 影响：报告新增 §3.4；R2 功能清单远程行从 ❌ 改 ✅（经自建隧道）。
+  待用户确认 NAS 型号。
+
+## 2026-11-12 libzrpc 是全平台 SDK 核心（DEVT_ 枚举取证）
+
+- 背景：用户问 iOS 是否也用 libzrpc。
+- 证据：DLL 内嵌设备类型枚举 DEVT_PC/MAC/IOS/ANDROID/OHOS(鸿蒙)/TV/
+  APPLETV/NAS/H5/WEB/MINI_PROGRAM/UNKNOWN —— 同一 C++ 核心跨平台编译，
+  **NAS 固件本身也用**（DEVT_NAS，远程协议两端同库）。
+- 结论：iOS/Android 高置信同核心（枚举+全端 P2P 功能一致；100% 确认需解
+  IPA/APK）。官方已移植 6+ 平台 → R3（要官方 Linux 版）更成立。
+  Android 端 libzrpc.so 是 ELF，若留符号则是比 stripped dll 更好的逆向参照
+  （可选验证：APK jniLibs）。iOS Mach-O 对 Linux 无直接帮助。
+- 顺带：社区资料证实极空间 Docker 可跑 lucky/Tailscale（host 网络），
+  Z4 Pro 等型号内置「节点小宝」P2P 组网——§3.4 隧道绕过有现成先例。
+- 影响：报告 §2.1 已补跨平台节。用户给了官网下载页 download.zspace.cn，待查。
+
+## 2026-11-12 官网下载页核验 + 官方 Skill = Rust CLI（R2 远程方案重大降险）
+
+- 背景：用户给出官网下载页 download.zspace.cn。
+- 证据/结论：
+  - 平台矩阵实抓：浏览器版 zconnect.cn / iOS（仅 App Store，无 IPA 直链）/
+    Android（升级接口有 APK 直链，V2.5.653，272.6MB）/ 亲情版 / 小程序 /
+    PC（Win/Win7/Mac×3）/ TV / 车机 / Skill。**无 Linux GUI 客户端**。
+  - **极空间 Skill（zspace-nas-agent-toolkit V0.3.11）= 官方 Rust CLI**，
+    六平台二进制（linux-x64 6.96MB / linux-arm64 5.46MB，直链+SHA256 在
+    包内 runtime-artifacts.json）。`--mode auto|lan|cloud`：cloud 走
+    www.zconnect.cn HTTPS 云代理 + oauth.zconnect.cn 标准 OAuth2，
+    **不经过 libzrpc**，90+ 管理操作全通。
+  - linux-x64 二进制实测（SHA256 校验过）：ELF 静态 stripped，Rust panic
+    串留模块名（api.rs/album_*.rs/file_metadata.rs）与 crate（tokio 1.53.2）；
+    端点 /account/oauth2/userinfo、/api/v1|v2/、/file/list、
+    /zvideo/video/playlist/info —— 与网页版同套 NAS HTTP API。
+  - **R2 远程方案升级**：薄壳远程模式 = 13579→zconnect HTTPS 云代理+OAuth2，
+    零 P2P 逆向，API 层有官方 Linux 参考实现可研究；Tailscale 降为提速选项。
+    报告 §3.4 已重写。云代理带宽/功能限制待 Phase 0 实测（网页版无同步）。
+  - 官方有 Rust 工程师（二进制内开发者路径）→ R3 要 Linux 版更成立。
+- 影响：R2 成功率置信度再升；iOS 同核心结论不变（DEVT_ 枚举），
+  Android APK（272.6MB>100MB）下载验证 libzrpc.so 需用户批准，未下。
+  临时目录 build/research-re 已清理；Skill 直链见报告 §3.4。
+
+## 2026-11-12 Android APK 实锤 libzrpc.so（用户批准后下载验证）
+
+- 背景：用户批准下载 Android APK 验证 libzrpc。
+- 证据：官方 APK V2.5.653（285,822,878 字节，与接口 package_size 一致）内
+  `lib/arm64-v8a/libzrpc.so`：12.75MB，ELF aarch64 stripped，仅 arm64 ABI；
+  同栈（asio 759/protobuf 96/OpenSSL 导出在 dynsym）、同 DEVT 枚举（无 OHOS）。
+  导出 = JNI `Java_com_zrpc_service_ZrpcService_*` 31 方法，与桌面 20 FFI
+  核心一一对应 + fileTransfer*7/pushRegister/setCallBack/netStatusChanged/
+  getNasDrIp/active。APK 播放也用 libvlc（libvlc.so+libvlcjni.so）。
+- 结论：**iOS/Android 同 libzrpc 核心实锤**（Android 直接证据；iOS 枚举+
+  同架构高置信，IPA 无官方渠道不取）。R2 契约获 JS ffi 表 + JNI 名双重验证。
+  android .so 是 bionic 链接，glibc Linux 不能 dlopen，仅作 RE 参照；
+  APK 的 DEX/Java 层比 C++ 易读，Phase 0 可用作契约参照（APK 已删可重取）。
+- 物料：`build/research-material/libzrpc-android-arm64.so`（12.75MB，留存）；
+  APK 与其余解包物已删。报告 §2.1 已更新。
+
+## 2026-11-12 mac 版 libzrpc.dylib 未 strip —— 多版本逆向的钥匙（重大突破）
+
+- 背景：用户问「多版本能否逆向闭源库」，批准下载两个 mac 包，明确最终目标
+  = **Deepin 25（amd64）可安装运行的原生版**。
+- 证据（官方 mac V2.46.2026101501，Intel+ARM 均下载，解 x64）：
+  `极空间.app/.../app.asar.unpacked/sdk/libzrpc.dylib`（15.8MB，Mach-O x86_64）
+  **未 strip**：LC_SYMTAB 75,302 符号，定义函数 55,479（local 40,922），
+  C++ mangled 27,957，去重 32,172 可读符号。**45 个源文件名**
+  （libzrpc.cpp/direct_connection/p2p_connection/tunnel_connection/
+  signal_connection/zrpl_connector/zrps_delegate/nas_status_checker/
+  message.tls.pb.cc/message.tp.pb.cc…）。私有命名空间 zsi/zrpc/psl/basefw/
+  msg/live_p2p_transfer/p2pnetwork/BaseHcdn；开源依赖 boost.asio/protobuf/
+  **Simple-Web-Server**/cxxopts/pugixml（Linux 可链接同款）。
+  Win/Android 都 stripped，唯 mac 保留 → 用户「多版本」直觉证实。
+- 结论：闭源库从黑盒变「有类图/源文件清单的已知架构」。**R2（LAN-only）
+  升为高置信主线**（LAN 类精确锁定 direct_connection/discover_utils/
+  nas_confirm/nas_status_checker）；完整远程 P2P 仍不推荐（服务端墙：
+  读懂客户端≠服务端认你）。mac 二进制不能直接跑 Linux（Mach-O≠ELF），
+  价值=符号蓝图+开源依赖清单+跨平台 JS/资源。
+- 方法：GNU objdump 不支持 Mach-O；纯 Python 解析 LC_SYMTAB + c++filt
+  批量 demangle（脚本 macho_sym.py/demangle_analysis.py 已存物料）。
+  DMG 用 7z 全量解（中文路径通配符匹配失败，需全解）。
+- 物料（build/research-material/，37MB）：libzrpc-mac-x64.dylib、
+  libzrpc-android-arm64.so、libplaysdk-mac-x64.dylib、
+  libzrpc-mac-x64-symbols.txt（32k 符号）、libzrpc-architecture.txt、两脚本。
+  mac dmg（750MB）与解包树已删。
+- 影响：报告新增 §2.4（符号突破）、§3.5（mac→Linux 复用盘点 + Deepin 25
+  产物组件清单），§0/§3.1/§3.2 判定修订。下一步 Phase 0：Wine 容器抓包
+  定 LAN 发现格式 + 按符号研究 direct_connection/discover_utils。
+
+## 2026-11-12 Phase 0 静态实测：LAN 发现协议逆向，🟢 GREEN LIGHT（离线，NAS 零接触）
+
+- 背景：用户批准离线静态分析（担心 NAS 安全，确认只看不碰）。sudo 需密码，
+  capstone 改用 PyPI wheel 免 root 装（PYTHONPATH=build/research-material/pylibs）。
+- 证据（mac dylib + 自写 Mach-O 解析 + capstone，脚本 disasm.py 已存物料）：
+  - 调用链 discover_session::boardcast → discover_utils::make_discover_request
+    → make_cipher_key + zsi::crypto::aes::encrypt → udp_socket::broadcast。
+  - **UDP 广播端口 5577（0x15c9）**；请求明文 JSON {"key":"tdxnassearch",...}
+    （json::FastWriter）；**AES-128-CBC**（key/IV 各 16B）。
+  - **make_cipher_key = boost MT19937 固定种子 0x482667=4728423**，624 状态字、
+    乘子 0x6C078965、64 个随机数 stringstream 拼接 → key/IV。
+    **与 JS service-config 加密同种子**（已确认可 Rust 复现）。
+- 结论：🟢 LAN 发现密钥固定可复现，实质透明，**R2 立项放行**。
+  中途一度误判「纯明文」，反汇编到底见尾部 AES，但密钥可复现结论不变。
+  Phase 1 待补：key/IV 精确切片、响应 JSON 字段、13579 代理行为。
+  **运行时抓包降级为可选确认**（静态已答生死问），不必碰 NAS。
+- 影响：报告新增「Phase 0 静态实测结果」节（§1 前）。任务#11/#13 完成，
+  #12 改可选。物料增 disasm.py + pylibs(capstone)；capstone.whl 已删。
+
+## 2026-11-12 Phase 0 细节挖完：加密与 JS 完全同构 + 响应字段 + 代理约定
+
+- 背景：用户「继续挖细节」，离线补齐三项（NAS 零接触）。
+- 证据/结论（mac dylib 反汇编）：
+  - **加密修正**：实际 call `EVP_aes_256_gcm`（0x3ec400）→ **AES-256-GCM**，
+    密文 hex 编码（输出 2×）。中途据 OpenSSL 通用串表误判 AES-128-CBC，已纠正
+    （教训：通用串表含所有算法名，须看实际 call，不能凭字符串）。
+  - **密钥与 JS 完全同构**：make_cipher_key = MT19937(4728423)×64 →
+    stringstream → `zsi::crypto::sha256::calc`(0x44c60) → hex →
+    key=hex[0:32]、iv=hex[0:16]。与 JS service-config 同一套，Rust 直接复用。
+  - **发现响应字段**：make_discover_response 含 id/ip/hostname，内部
+    nas_id/local_ip/型号(Z04A)，"%s:%d" 拼 ip:port。
+  - **代理约定**：http_header_generator 维护 uri_arr/template/user_agent；
+    模板实例 = NAS API 端点（/v2/file/download、/system/recent、
+    /system/diskusage3、/zspool/info、/manager/services）+ **webagent=v2**
+    标记 + **rnd=<ts>_<rand>** 缓存破坏。nas_confirm 用 https_client
+    （boost.asio.ssl）→ NAS API 走标准 HTTPS/TLS（reqwest 可处理）。
+- 影响：三项细节基本挖完，契约成形；剩微细节（key/iv 切片实测、完整响应字段、
+  UA 串、代理鉴权头）Phase 1 复现+对照真实包定稿。报告 Phase 0 节已更新。
+  **R2 可进 Phase 1（写 Rust libzrpc.so）**，等用户发话。
+
+## 2026-11-12 调研经验沉淀为项目文档
+
+- 背景：用户要求把调研经验总结进项目文档。
+- 决定/结论：新建 **`.agents/research-lessons.md`**（可复用方法论与纪律），
+  并在 AGENTS.md §0 阅读表挂索引。文档分工明确：
+  REPORT-linux-native-re.md=目标事实/契约；memory.md=逐次决策/产物；
+  research-lessons.md=以后怎么干（方法/坑）。
+- 内容六节：① 多平台符号策略（mac 常保留符号，下结论前验全平台）
+  ② Deepin 无 root 工具链（PyPI wheel+PYTHONPATH 装 capstone、纯 Python
+  解析 Mach-O+c++filt、7z 解 DMG 中文路径需全解）③ 逆向判断纪律
+  （凭 call 不凭字符串表判算法、固定种子 PRNG 是混淆、先读调用方、
+  读懂客户端≠服务端认你、demangle 后再统计）④ 可行性切分（按协议定义者切、
+  放弃协议≠放弃功能、官方工具是存在性证明、同引擎替换）⑤ 安全流程
+  （离线优先、抓包被动只读、NAS 禁区、下载阈值、物料卫生、口径豁免边界）
+  ⑥ 物料与复现（脚本/物料位置、复现命令、关键事实速查）。
+- 影响：后续会话做原生/逆向工作时按 AGENTS.md 索引读此文档。改动文件：
+  .agents/research-lessons.md（新增）、AGENTS.md（+1 行索引）、memory.md。
