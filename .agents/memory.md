@@ -739,3 +739,17 @@
   app 正常登录合法取得。URL 只用真实官方来源，无 routify 替换。
 - 影响：远程路径定案=复刻 libzrpc 强制中继（非云代理 OAuth）。下一步提取完整
   proto schema + 反汇编握手密码学评估难度，再实现。
+
+## 2026-11-15 分支瘦身：native/work 与 Rust target 误入 git，推送 1.85 GiB
+
+- 症状：research/linux-native-re 推送极慢。原因：两个提交把
+  native/work/（Electron 运行时 186 MB + zip 106 MB + 解包的官方 app）
+  和 native/libzrpc/target/（Rust 构建产物）共 9600+ 文件提交进了历史。
+- 处理：分支未推过远端 → git filter-repo --invert-paths 重写这两个提交
+  剔除上述目录（源码/文档全保留，已 diff 验证），.gitignore 补
+  native/work/ 与 native/libzrpc/target/，推送载荷降到 ~10 MiB。
+- 纪律：native/work/ 是运行时解包/下载的工作目录，target/ 是构建产物，
+  一律不进 git（同 packages/build 的口径；官方二进制也不宜再分发）。
+- 遗留：本地留有备份分支 backup/research-linux-native-re-pre-slim
+  （含旧大对象，.git 仍 ~672 MiB）。确认无用后可删分支 +
+  git reflog expire --expire=now --all + git gc --prune=now 缩到 ~10 MiB。
