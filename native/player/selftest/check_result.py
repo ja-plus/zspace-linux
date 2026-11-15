@@ -69,7 +69,8 @@ def main():
           f"statuses={[h.get('status') for h in http]}")
 
     ack = [m for m in upstream if m.get("f_type") == 1 and m.get("s_type") == 2]
-    check("上行 1/2 播放开始", len(ack) == 1 and "/splay/" in str(ack[0].get("info")),
+    check("上行 1/2 播放开始（初始 + 换集各一次）",
+          len(ack) == 2 and all("/splay/" in str(m.get("info")) for m in ack),
           f"count={len(ack)}")
 
     progress = [m for m in upstream if m.get("f_type") == 4 and m.get("s_type") == 3]
@@ -98,6 +99,32 @@ def main():
     check("seek/切音轨后使用新转码地址", any("TRANSCODE" in p for p in transcode_paths),
           f"paths={transcode_paths}")
 
+    ep_req = [m for m in upstream if m.get("f_type") == 3 and m.get("s_type") == 1]
+    check("上行 3/1 请求切集", len(ep_req) == 1 and "ep2.mkv" in str(ep_req[0].get("info")),
+          f"count={len(ep_req)} info={[m.get('info') for m in ep_req]}")
+
+    local_sub_req = [m for m in upstream if m.get("f_type") == 10 and m.get("s_type") == 1]
+    check("上行 10/1 请求本地字幕", len(local_sub_req) == 1,
+          f"count={len(local_sub_req)}")
+
+    main_msgs = [e["msg"] for e in entries if e.get("dir") == "main->player" and isinstance(e.get("msg"), dict)]
+    def has_main(ft, sty):
+        return any(m.get("f_type") == ft and m.get("s_type") == sty for m in main_msgs)
+    check("下行 12/1 剧集列表", has_main("12", "1"), f"main_msgs={len(main_msgs)}")
+    check("下行 12/2 字幕列表", has_main("12", "2"))
+    check("下行 12/3 合集信息", has_main("12", "3"))
+    check("下行 5/3 刷新播放列表", has_main("5", "3"))
+    check("下行 7/5 码流列表", has_main("7", "5"))
+    check("下行 6/3 空回包", has_main("6", "3"))
+    check("下行 12/0 设置回包", has_main("12", "0"))
+    check("下行 9/3 在线字幕回包", has_main("9", "3"))
+
+    quality_req = [m for m in upstream if m.get("f_type") == 7 and m.get("s_type") == 1]
+    check("上行 7/1 请求切码流", len(quality_req) == 1 and int(quality_req[0].get("result", -1)) == 1,
+          f"count={len(quality_req)} result={[m.get('result') for m in quality_req]}")
+    check("切码流后使用新地址", any("QUALITY" in p for p in transcode_paths),
+          f"paths={transcode_paths}")
+
     heartbeat = [m for m in upstream if m.get("f_type") == 4 and m.get("s_type") == 1]
     check("上行 4/1 心跳", len(heartbeat) >= 1, f"count={len(heartbeat)}")
 
@@ -111,6 +138,19 @@ def main():
     check("日志: 发送 11/1 并收到 11/3", "发送 11/1 请求重新出地址" in log and "收到 11/3 重新出地址" in log)
     check("日志: 发送 6/1 并收到 6/3", "发送 6/1 请求切换音轨" in log and "收到 6/3 音轨切换结果" in log)
     check("日志: 发送 11/2 并收到字幕结果", "发送 11/2 请求切换字幕" in log and "收到 11/3 字幕结果" in log)
+    check("日志: 12/x 三条消息", all(k in log for k in ["收到剧集列表 12/1: 2 项", "收到字幕列表 12/2: 1 项", "收到合集信息 12/3"]))
+    check("日志: 5/3 / 7/5 / 6/3 / 12/0", all(k in log for k in [
+        "收到刷新后的播放列表 5/3", "收到码流列表 7/5: 3 项",
+        "收到 6/3（无新地址", "收到 12/0 片头片尾设置回包"]))
+    check("日志: 9/3 在线字幕", "9/3 返回字幕列表: 1 项" in log and "已加载外挂字幕 index=7" in log)
+    check("日志: 7/1 切码流", "发送 7/1 请求切换码流" in log and "收到 7/3 码流切换结果" in log)
+    check("日志: 12/2 自动加载外挂字幕", "已加载外挂字幕 index=5" in log)
+    check("日志: 3/1 切集", "发送 3/1 切换剧集" in log and "收到新播放地址 (f_type=3 / s_type=2)" in log)
+    check("日志: 10/1 本地字幕", "发送 10/1 请求主进程打开本地字幕选择" in log and "已加载外挂字幕" in log)
+    check("外挂字幕实际被拉取", any(p.endswith("sub-chi.srt") for p in transcode_paths)
+          and any(p.endswith("sub-local.srt") for p in transcode_paths)
+          and any(p.endswith("sub-search.srt") for p in transcode_paths),
+          f"paths={transcode_paths}")
     check("日志: 倍速", "倍速 → 1.25x" in log)
     check("日志: 暂停/继续", log.count("暂停状态切换") >= 2, f"count={log.count('暂停状态切换')}")
 

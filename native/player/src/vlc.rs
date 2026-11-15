@@ -27,25 +27,7 @@ pub struct VlcPaths {
 /// A libvlc runtime without its matching plugin directory cannot even create an
 /// instance, and mixing a 3.0.21 runtime with 3.0.24 plugins is undefined
 /// behaviour, so the pair is resolved together.
-pub fn resolve_paths(explicit_lib: Option<&str>, explicit_plugins: Option<&str>) -> Result<VlcPaths, String> {
-    if let Some(lib) = explicit_lib {
-        let lib = PathBuf::from(lib);
-        let dir = lib.parent().ok_or("--vlc-lib has no parent directory")?.to_path_buf();
-        let plugins = match explicit_plugins {
-            Some(p) => Some(PathBuf::from(p)),
-            None => {
-                let guess = dir.join("vlc/plugins");
-                if guess.is_dir() { Some(guess) } else { None }
-            }
-        };
-        let core = dir.join("libvlccore.so.9");
-        return Ok(VlcPaths {
-            libvlc: lib,
-            libvlccore: if core.exists() { Some(core) } else { None },
-            plugins,
-        });
-    }
-
+pub fn resolve_paths() -> Result<VlcPaths, String> {
     let mut candidates: Vec<(PathBuf, PathBuf, PathBuf)> = Vec::new();
 
     // Debian/Deepin multi-arch layout.
@@ -77,11 +59,7 @@ pub fn resolve_paths(explicit_lib: Option<&str>, explicit_plugins: Option<&str>)
         }
         let core = if core.exists() { Some(core) } else { None };
         if plugins.is_dir() {
-            let plugins = match explicit_plugins {
-                Some(p) => Some(PathBuf::from(p)),
-                None => Some(plugins),
-            };
-            return Ok(VlcPaths { libvlc: lib, libvlccore: core, plugins });
+            return Ok(VlcPaths { libvlc: lib, libvlccore: core, plugins: Some(plugins) });
         }
         if partial.is_none() {
             partial = Some(VlcPaths { libvlc: lib, libvlccore: core, plugins: None });
@@ -89,8 +67,7 @@ pub fn resolve_paths(explicit_lib: Option<&str>, explicit_plugins: Option<&str>)
     }
 
     partial.ok_or_else(|| {
-        "找不到 libvlc.so.5（可用 --vlc-lib 指定；本机未安装 VLC 运行库时请先安装 libvlc5/vlc-plugin-base）"
-            .to_string()
+        "找不到 libvlc.so.5（本机未安装 VLC 运行库时请先安装 libvlc5/vlc-plugin-base）".to_string()
     })
 }
 
@@ -153,7 +130,7 @@ unsafe fn sym<T: Copy>(lib: &Library, name: &[u8]) -> Result<T, String> {
 }
 
 impl Vlc {
-    pub fn new(paths: &VlcPaths, extra_args: &[String]) -> Result<Self, String> {
+    pub fn new(paths: &VlcPaths) -> Result<Self, String> {
         // libvlc 3.0 reads the plugin directory from this env variable at
         // instance creation time.
         if let Some(plugins) = &paths.plugins {
@@ -207,14 +184,11 @@ impl Vlc {
             }
         };
 
-        let mut owned: Vec<CString> = vec![
+        let owned: Vec<CString> = vec![
             CString::new("--intf=dummy").unwrap(),
             CString::new("--no-video-title-show").unwrap(),
             CString::new("--no-lua").unwrap(),
         ];
-        for extra in extra_args {
-            owned.push(CString::new(extra.as_str()).map_err(|_| "VLC 参数包含 NUL".to_string())?);
-        }
         let mut argv: Vec<*const c_char> = owned.iter().map(|s| s.as_ptr()).collect();
         argv.push(std::ptr::null());
 
@@ -247,8 +221,8 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new(paths: &VlcPaths, extra_args: &[String]) -> Result<Self, String> {
-        let vlc = Vlc::new(paths, extra_args)?;
+    pub fn new(paths: &VlcPaths) -> Result<Self, String> {
+        let vlc = Vlc::new(paths)?;
         let mp = unsafe { (vlc.f.media_player_new)(vlc.inst) };
         if mp.is_null() {
             return Err("libvlc_media_player_new 失败".into());

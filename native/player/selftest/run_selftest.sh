@@ -33,6 +33,11 @@ if [ ! -f "$MEDIA/multitrack.mkv" ]; then
     "$MEDIA/multitrack.mkv" || { echo "FAIL: 样片生成失败"; exit 1; }
 fi
 
+# 外挂字幕样片（12/2 与 10/1 用）
+printf '1\n00:00:00,000 --> 00:00:20,000\n外挂字幕（12/2）\n\n' > "$MEDIA/sub-chi.srt"
+printf '1\n00:00:00,000 --> 00:00:20,000\n本地字幕（10/1）\n\n' > "$MEDIA/sub-local.srt"
+printf '1\n00:00:00,000 --> 00:00:20,000\n在线字幕（9/3）\n\n' > "$MEDIA/sub-search.srt"
+
 echo "== 3/6 清理残留实例 =="
 for pid in $(pgrep -x zspace-player 2>/dev/null); do kill "$pid" 2>/dev/null; done
 for pid in $(pgrep -f "mock_main.py --media-dir $MEDIA" 2>/dev/null); do
@@ -42,7 +47,7 @@ sleep 0.3
 
 echo "== 4/6 启动假主进程 =="
 python3 "$HERE/mock_main.py" --media-dir "$MEDIA" --media multitrack.mkv \
-  --port "$CONTROL_PORT" --close-after 26 --log "$OUT/mock.jsonl" \
+  --port "$CONTROL_PORT" --close-after 36 --log "$OUT/mock.jsonl" \
   > "$OUT/mock.out" 2>&1 &
 MOCK_PID=$!
 trap 'kill $MOCK_PID 2>/dev/null; for pid in $(pgrep -x zspace-player 2>/dev/null); do kill $pid 2>/dev/null; done' EXIT
@@ -63,8 +68,8 @@ import json, urllib.parse
 print(urllib.parse.quote(json.dumps({"server": {"ip": "127.0.0.1", "port": $CONTROL_PORT}}, separators=(",", ":"))))
 PY
 )
-ZSPACE_PLAYER_LOG="$OUT/player.log" "$BIN" "$ENC" "1" "1080,720" "zspace" zh "username=tester" \
-  > "$OUT/player.out" 2>&1 &
+"$BIN" "$ENC" "1" "1080,720" "zspace" zh "username=tester" \
+  > "$OUT/player.out" 2> "$OUT/player.log" &
 PLAYER_PID=$!
 
 WID=""
@@ -82,9 +87,18 @@ sleep 4
 import -window root "$OUT/shot-window.png" 2>/dev/null
 xwininfo -id "$WID" > "$OUT/window-info.txt" 2>&1
 
-# 键盘控制：切音轨（6/1 → 6/3 新地址）、切字幕（11/2）、倍速、全屏
+# 键盘控制：
+#   n = 下一集（3/1 → 3/2）
+#   a = 切音轨（6/1 → 6/3 新地址）
+#   s = 切字幕（11/2）
+#   l = 本地字幕（10/1）
+#   y = 下一个码流（7/1 → 7/3）
+#   ] = 倍速、f = 全屏
+xdotool key --window "$WID" n 2>/dev/null; sleep 4.0
 xdotool key --window "$WID" a 2>/dev/null; sleep 1.2
 xdotool key --window "$WID" s 2>/dev/null; sleep 0.8
+xdotool key --window "$WID" l 2>/dev/null; sleep 1.2
+xdotool key --window "$WID" y 2>/dev/null; sleep 1.2
 xdotool key --window "$WID" bracketright 2>/dev/null; sleep 0.4
 xdotool key --window "$WID" f 2>/dev/null; sleep 1.8
 import -window root "$OUT/shot-fullscreen.png" 2>/dev/null
@@ -93,7 +107,7 @@ xwininfo -id "$WID" > "$OUT/window-info-fullscreen.txt" 2>&1
 # 暂停/继续 + seek（11/1 → 11/3 新地址）
 xdotool key --window "$WID" space 2>/dev/null; sleep 1.0
 xdotool key --window "$WID" space 2>/dev/null; sleep 0.6
-xdotool key --window "$WID" Right 2>/dev/null; sleep 1.2
+xdotool key --window "$WID" Right 2>/dev/null; sleep 3.0
 
 # 等播放器自己退出（mock 在 26s 后下发 f_type=0）
 for _ in $(seq 1 400); do

@@ -318,8 +318,8 @@ grep -c 'linux"==process.platform||/\^\[\\000' background.js # 1（按实际替�
 #    点播放后 3 s 内出现 "Player server been connected"
 #    关闭时 main.log 有 "stopVideo" 或 "PlayerServer socket ended"
 
-# 4) 播放器侧
-ZSPACE_PLAYER_LOG=/tmp/player.log ...   # 启动应用前导出即可
+# 4) 播放器侧（日志在 stderr，自测用重定向收集）
+"$APP/uzplayer/zspace-player" "<encoded>" 1 "1080,720" zspace zh "username=x" 2>/tmp/player.log
 # 期望：已连接主进程 / 收到播放列表 / 开始播放 / 上报 1/2
 ```
 

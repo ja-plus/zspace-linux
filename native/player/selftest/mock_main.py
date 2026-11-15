@@ -127,6 +127,8 @@ class ControlHandler(socketserver.BaseRequestHandler):
             "frames": 0, "progress": [], "closed": False,
             "audio": 0, "sub": 0,
             "seek_requests": [], "audio_requests": [], "subtitle_requests": [],
+            "episode_requests": [], "local_subtitle_requests": [],
+            "quality_requests": [],
         }
         stop = threading.Event()
         send_lock = threading.Lock()
@@ -197,6 +199,36 @@ class ControlHandler(socketserver.BaseRequestHandler):
                         state["sub"] = sidx
                         reply({"f_type": "11", "s_type": "3", "code": 200,
                                "subtitle_index": sidx})
+                    elif ft == 3 and sty == 1:
+                        # 选剧集：按 info(file_path) 找目标集，回 3/2 新地址。
+                        info = msg.get("info") or msg.get("encrypted_path")
+                        state["episode_requests"].append(info)
+                        ep = self.server.episode_by_path(info)
+                        item = self.server.item(
+                            token="EPISODE", seek=0,
+                            audio_index=state["audio"], subtitle_index=state["sub"],
+                            file_path=ep["file_path"], label=ep["label"],
+                        )
+                        reply({"f_type": "3", "s_type": "2", "code": 200, **item})
+                    elif ft == 10 and sty == 1:
+                        # 本地字幕：真实主进程会弹选择框/上传后回 10/1；
+                        # 这里直接返回一条新字幕。
+                        state["local_subtitle_requests"].append(1)
+                        reply({"f_type": "10", "s_type": "1", "code": 200,
+                               "subtitle_list": self.server.local_subtitles(),
+                               "subtitle_index": 6})
+                    elif ft == 7 and sty == 1:
+                        # 切码流：按 result 返回新地址 + 新 format_index。
+                        index = int(msg.get("result") or 0)
+                        state["quality_requests"].append(index)
+                        item = self.server.item(
+                            token="QUALITY",
+                            seek=float(msg.get("seek") or 0),
+                            audio_index=state["audio"], subtitle_index=state["sub"],
+                        )
+                        item["format_index"] = index
+                        item["current_fmt"] = "HD" if index == 1 else "OP"
+                        reply({"f_type": "7", "s_type": "3", "code": 200, **item})
 
         reader = threading.Thread(target=loop, daemon=True)
         reader.start()
@@ -225,6 +257,19 @@ class ControlHandler(socketserver.BaseRequestHandler):
             sock.sendall(chunk)
         log({"dir": "net", "event": "playlist-sent", "bytes": len(raw), "fragments": 3})
 
+        # 3) 官方播放列表后紧接着的 12/3（合集）、12/1（剧集），
+        #    1.5 s 后再来一条 12/2（字幕列表 + 自动选择）。
+        reply(self.server.collection_msg())
+        reply(self.server.episode_msg())
+        # 无发送入口的收包路径：用服务端主动回包模拟，验证播放器处理正确。
+        reply(self.server.playlist_refresh_msg())   # 5/3
+        reply(self.server.format_list_msg())        # 7/5
+        reply(self.server.audio_ack_msg())          # 6/3（无 uri）
+        reply(self.server.skip_ack_msg())           # 12/0
+        reply(self.server.online_sub_msg())         # 9/3（带 subtitle_list/index）
+        time.sleep(1.5)
+        reply(self.server.subtitle_msg())
+
         deadline = time.time() + self.server.close_after
         while time.time() < deadline and not stop.is_set():
             time.sleep(0.2)
@@ -249,13 +294,14 @@ class ControlHandler(socketserver.BaseRequestHandler):
 
 
 def build_item(port, http_port, media_dir, name, token="TESTSECRET", seek=0.0,
-               audio_index=0, subtitle_index=0):
+               audio_index=0, subtitle_index=0, file_path=None, label="自测样片"):
     path = os.path.join(media_dir, name)
     duration = 45
     uri = f"http://127.0.0.1:{http_port}/splay/{token}/{name}"
     return {
-        "index": 0, "active": 1, "label": "自测样片", "file_name": name,
-        "file_path": "/video/" + name, "file_size": os.path.getsize(path),
+        "index": 0, "active": 1, "label": label, "file_name": name,
+        "file_path": file_path or ("/video/" + name),
+        "file_size": os.path.getsize(path),
         "uri": uri, "duration": duration, "video_duration": duration,
         "seek": seek, "start_time": seek,
         "video_codec": "h264", "audio_index": audio_index,
@@ -270,7 +316,10 @@ def build_item(port, http_port, media_dir, name, token="TESTSECRET", seek=0.0,
             {"index": 0, "codec_name": "subrip", "codec_type": "subtitle", "tags": {"language": "eng"}, "data_source": 0},
             {"index": 1, "codec_name": "subrip", "codec_type": "subtitle", "tags": {"language": "chi"}, "data_source": 0},
         ],
-        "format_list": [{"index": 0, "mod": "OP", "w": 960, "h": 540, "name": "原画", "transcoded": 0}],
+        "format_list": [
+            {"index": 0, "mod": "OP", "w": 960, "h": 540, "name": "原画", "transcoded": 0},
+            {"index": 1, "mod": "HD", "w": 640, "h": 360, "name": "高清", "transcoded": 1},
+        ],
         "format_index": 0, "current_fmt": "OP", "play_chapter": "",
     }
 
@@ -281,9 +330,16 @@ def build_playlist(port, http_port, media_dir, name):
         "server": {"ip": "127.0.0.1", "port": port},
         "playList": [item],
         "skip": {"previous": 0, "start": 0, "end": 0, "preview": 0},
-        "collectionInfo": {"collection_id": "", "classification_id": ""},
+        "collectionInfo": {"collection_id": "testcoll", "classification_id": ""},
         "f_type": "5", "s_type": "5", "code": 200,
     }
+
+
+def build_episodes(port, http_port, media_dir, name):
+    return [
+        {"index": 0, "label": "第1集", "file_path": "/video/" + name, "episode_path": "", "active": 1},
+        {"index": 1, "label": "第2集", "file_path": "/video/ep2.mkv", "episode_path": "", "active": 0},
+    ]
 
 
 def main():
@@ -312,6 +368,80 @@ def main():
         args.port, httpd.server_address[1], args.media_dir, args.media, **kw
     )
     srv.playlist = lambda: build_playlist(args.port, httpd.server_address[1], args.media_dir, args.media)
+    episodes = build_episodes(args.port, httpd.server_address[1], args.media_dir, args.media)
+    srv.episodes = lambda: episodes
+    srv.episode_by_path = lambda info: next(
+        (e for e in episodes if e["file_path"] == info), episodes[0]
+    )
+    srv.episode_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "12", "s_type": "1", "code": 200, "videoList": episodes,
+    }
+    srv.collection_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "12", "s_type": "3", "code": 200,
+        "collectionInfo": {
+            "collection_id": "testcoll", "title": "自测合集",
+            "skip": {"previous": 0, "start": 0, "end": 0, "preview": 0},
+            "history": {},
+        },
+    }
+    srv.subtitle_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "12", "s_type": "2", "code": 200,
+        "file_path": "/video/" + args.media,
+        "subtitleList": [{
+            "index": 5, "codec_name": "subrip", "codec_type": "subtitle",
+            "tags": {"language": "chi", "title": "外挂字幕"},
+            "url": "/splay/TESTSECRET/sub-chi.srt", "path": "",
+            "hash": "ext5", "extraction": 0, "support_switch": True,
+            "external": True, "data_source": 2,
+        }],
+        "subtitle_index": 5,
+    }
+    srv.local_subtitles = lambda: [{
+        "index": 6, "codec_name": "subrip", "codec_type": "subtitle",
+        "tags": {"language": "chi", "title": "本地添加"},
+        "url": "/splay/TESTSECRET/sub-local.srt", "path": "",
+        "hash": "local6", "extraction": 0, "support_switch": True,
+        "external": True, "data_source": 4,
+    }]
+    srv.playlist_refresh_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "5", "s_type": "3", "code": 200,
+        "playList": [build_item(args.port, httpd.server_address[1], args.media_dir, args.media)],
+    }
+    srv.format_list_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "7", "s_type": "5", "code": 200,
+        "file_path": "/video/" + args.media,
+        "format_list": [
+            {"index": 0, "mod": "OP", "w": 960, "h": 540, "name": "原画", "transcoded": 0},
+            {"index": 1, "mod": "HD", "w": 640, "h": 360, "name": "高清", "transcoded": 1},
+            {"index": 2, "mod": "SD", "w": 480, "h": 270, "name": "标清", "transcoded": 1},
+        ],
+    }
+    srv.audio_ack_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "6", "s_type": "3", "code": 200,
+    }
+    srv.skip_ack_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "12", "s_type": "0", "code": 200, "message": "ok",
+    }
+    srv.online_sub_msg = lambda: {
+        "server": {"ip": "127.0.0.1", "port": args.port},
+        "f_type": "9", "s_type": "3", "code": 200,
+        "file_path": "/video/" + args.media,
+        "subtitle_list": [{
+            "index": 7, "codec_name": "subrip", "codec_type": "subtitle",
+            "tags": {"language": "chi", "title": "在线下载"},
+            "url": "/splay/TESTSECRET/sub-search.srt", "path": "",
+            "hash": "search7", "extraction": 0, "support_switch": True,
+            "external": True, "data_source": 5,
+        }],
+        "subtitle_index": 7,
+    }
 
     print(json.dumps({"event": "ready", "control_port": args.port,
                       "http_port": httpd.server_address[1]}, ensure_ascii=False), flush=True)

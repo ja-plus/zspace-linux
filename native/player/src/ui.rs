@@ -265,6 +265,21 @@ impl AppWindow {
             0x006d => {
                 if first_press { Some(Command::MuteToggle) } else { None }
             }
+            // n / p: next / previous episode (12/1 list)
+            0x006e => {
+                if first_press { Some(Command::NextEpisode) } else { None }
+            }
+            0x0070 => {
+                if first_press { Some(Command::PrevEpisode) } else { None }
+            }
+            // l: 选择本地字幕（走 10/1，由主窗口弹选择框）
+            0x006c => {
+                if first_press { Some(Command::LoadLocalSubtitle) } else { None }
+            }
+            // y: 下一个码流（7/1；官方为清晰度菜单）
+            0x0079 => {
+                if first_press { Some(Command::QualityNext) } else { None }
+            }
             // ] / = : faster
             0x005d | 0x003d => {
                 if first_press { Some(Command::RateBy(0.25)) } else { None }

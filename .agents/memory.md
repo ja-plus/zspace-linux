@@ -1110,5 +1110,92 @@
   不投稿星火、仅个人使用（改动了官方产物）。
 - D3：`.agents/sources.md` 已有 V2.46.2026101501，无需追加。
 
+## 2026-11-16 四个空壳 FFI 按官方 DLL 实测补全
+
+- 取证：Wine 隔离副本启动官方 Windows 客户端 → Node inspector 直接调
+  `global._proxyDll.libzrpc_*`；本机 mock 5055（200/500）、开/关端口、不可达 IP。
+  未用账号凭据、未改 NAS。
+- `get_nas_status` 官方字段只有
+  `{conn_type, connected, local_network, nas_id}` + `code/msg`，**没有 `online`**；
+  `conn_type` = `none|direct|tunnel`，`connected` 按真实活动连接算。
+  已改为活动连接计数（`proxy.rs` 新增 `(lan, tunnel)` 计数）。
+- `detect_nas`: DNS → `GET http://<ip>:5055/home/static/version`；200 且 body 非空
+  即成功，`nas_id`=body；失败统一 `{"code":404,"data":null,"msg":"failed: invalid str"}`。
+- `check_ports`: `{allow,deny,msg,result}`；0=failed、1=partial（有 deny）、2=success。
+- `link_diagnose`: `code` 为字符串；成功 0/"成功"、DNS 失败 10000、TCP:80 失败 30000。
+- `network_diagnose`: 成功 0/0/"成功"；NAS 连接失败 3/400/"内网IP连接失败…"。
+- 单测 30 过 2 ignored；ctypes 调真实 `.so` 与官方输出逐字段一致；
+  `network_diagnose` 对真实 NAS 成功、伪造 nas_id 返回 3/400。
+- 未实测：network_diagnose 的 DNS/公网失败数值（需改解析或断网）；
+  LAN `conn_type=direct`（静态字符串，未真机抓）；detect_nas 的
+  `can't connect to target ip` 分支。对照表：`native/research-remote/FFI-BEHAVIOR.md`。
+- 本轮未提交（等播放器改动一起）。
+- 播放器自测首次 41/45：换集后 1.2s 就按 a/s，VLC 尚未建轨 → 6/1 未发、
+  11/2 带 -1、进度未过 seek 点。调整 selftest 时序（n 后 4s、close-after 36、
+  seek 后 3s）后 **45/45 通过**；产品代码未改。
 
 
+
+
+
+## 2026-11-16 播放器清理非原版开关
+
+- 背景：用户要求与原版严格对齐，不留自加的调试/测试开关。
+- 改动（native/player）：
+  - 删除 `--help`（未知 `--` 参数只记日志并忽略，与官方播放器一致）。
+  - 删除所有用户可配置环境变量：`ZSPACE_VLC_LIB`、`ZSPACE_VLC_PLUGINS`、
+    `ZSPACE_VLC_ARGS`、`ZSPACE_PLAYER_DEBUG`、`ZSPACE_PLAYER_HEADLESS`、
+    `ZSPACE_PLAYER_USERDATA`、`ZSPACE_PLAYER_LOG`；libvlc 只保留自动探测。
+  - 日志统一写 stderr；自测改为 `2> out/player.log` 收集。
+  - 保留 `ZSPACE_PLAYER_ENV_READY`（自身 re-exec 的内部防重入标记，不是用户选项）。
+- 验证：`cargo test --release` 9/9；端到端自测 25/25；
+  二进制 strings 中仅剩 `ZSPACE_PLAYER_ENV_READY`。
+- 产物：`native/player/target/release/zspace-player`（967864 B，
+  SHA256 8c3b4dbe69b5be0d5171fa562f7626a7d86b1f6fdd93bc27a476977ff58a8385）。
+- 未执行 git 操作；`native/patches/patch_app.py`、`native/run-native.sh` 未改。
+
+## 2026-11-16 播放器补 12/x、10/x 协议覆盖
+
+- 证据：
+  - 官方真实 playList（Wine 容器 player.log）里 `subtitle_list[]` 带
+    `index`（实测 2/3/4…）、`url`（相对路径 `/splay/<token>/<n>.srt`）、
+    `support_switch/external/data_source`；可拼 `apiHost` 直接用 libvlc 加载。
+  - background.js：`hc()`→12/1（videoList）、`pc()`→12/2（**camelCase `subtitleList`**）、
+    `fc()`→12/3（collectionInfo）；10/x 的 `tc()` 回包用 **snake_case `subtitle_list`**；
+    `10/1` 走主窗口选字幕，`10/2` 上传本地文件，`10/3` 下载 URL（`Ja` 存到
+    userData/Subtitles，回包只有 code/url）。
+- 实现：
+  - 12/1 保存剧集列表；N/P 键 → `3/1`（info=目标 file_path）→ `3/2` 换集。
+  - 12/2 更新字幕列表；`subtitle_index>=0` 时按 `subtitle_list[].url` 加载外挂字幕。
+  - 12/3 保存 collectionInfo（title/skip/history），暂不自动应用 skip。
+  - 10/1 可触发（L 键）；10/x 回包统一处理 subtitle_list + subtitle_index；
+    10/3 只记下载结果（本地文件路径待取证）。
+  - `4/3` 的 subtitle_index 优先用 NAS 索引（`nas_sub_index`），回退 VLC 轨道序号。
+- 未实现/待取证：10/2、10/3 的发送入口（依赖 UI/9.x）；12/3 skip 自动应用；
+  NAS subtitle index 与 VLC SPU 序号映射。
+- 自测：新增 12/1、12/2、12/3 下行与 3/1、10/1 上行，断言外挂 .srt 实际被拉取；
+  `cargo test` 9/9，端到端 **35/35**。产物 986,776 B，
+  SHA256 30c0657491d56ef5aa5f47f60623e853dcb6eb76（前 40 位）。
+- 未执行 git；未改 `native/patches/`、`native/run-native.sh`。
+
+## 2026-11-16 播放器补 5/2、6/2、7/x、9/x、12/0 收包
+
+- 证据（background.js 主进程 handler）：
+  - `5/2` → 回 `5/3`，body 是 `playList=xa.playList`（无其它字段）。
+  - `6/2` → 只回 `6/3 {code,instanceId,server}`，**不带音轨列表**（列表在 playList item 里）。
+  - `7/1`（也覆盖 7/2）字段：`result`=format_list 索引、`seek`、`audiotrack`、`subtitle`；
+    成功回 `7/3` 且 `Object.assign(e, xa.current)`（带 uri/seek）。
+  - `7/4` → 回 `7/5 {format_list}`（`aa()` 取码流列表）。
+  - `9/1/2/5/6` → `info_list`；`9/3/7` → `subtitle_list` + `subtitle_index`；
+    `9/4` → code/message。
+  - `12/0` → 调 `Js()` 后回 `{code,message}`。
+- 实现：
+  - 收包：5/3 保存 playList；7/5 更新 format_list；6/3 无 uri 视为 6/2 空回包；
+    9/x 保存 info_list / 加载 subtitle_list；12/0 记录回包。
+  - 发送：`7/1` 已接（Y 键循环 format_list，等 7/3 续播）；`5/2`、`6/2`、`7/4`、
+    `9/x`、`12/0`、`10/2`、`10/3` 的发送入口缺 UI（刷新列表/音轨菜单/清晰度菜单/
+    在线字幕搜索/片头片尾设置/拖拽），已在 README 列表标注。
+- 自测：假主进程主动回 5/3、7/5、6/3、12/0、9/3 以覆盖收包；Y 键触发 7/1→7/3，
+  断言 `/splay/QUALITY/...` 与 `sub-search.srt` 实际拉取；`cargo test` 9/9，
+  端到端 **45/45**。产物 994,352 B，SHA256 3da8ec38cd3656bda9c795b9513c1062775f59a9…。
+- 未执行 git；未改 `native/patches/`、`native/run-native.sh`。

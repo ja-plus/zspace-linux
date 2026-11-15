@@ -29,6 +29,48 @@ fn proxies() -> &'static Mutex<HashMap<u16, Proxy>> {
     PROXIES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Live connection counts `(lan, tunnel)`.
+///
+/// The official `get_nas_status` reports `connected=true` / a non-`none`
+/// `conn_type` only while a real NAS connection exists — merely starting the
+/// local listener keeps it at `none`. Track active handlers to match that.
+static ACTIVE: OnceLock<Mutex<(usize, usize)>> = OnceLock::new();
+
+fn active() -> &'static Mutex<(usize, usize)> {
+    ACTIVE.get_or_init(|| Mutex::new((0, 0)))
+}
+
+pub fn active_counts() -> (usize, usize) {
+    *active().lock().unwrap()
+}
+
+struct ConnGuard {
+    remote: bool,
+}
+
+impl ConnGuard {
+    fn new(remote: bool) -> Self {
+        let mut a = active().lock().unwrap();
+        if remote {
+            a.1 += 1;
+        } else {
+            a.0 += 1;
+        }
+        Self { remote }
+    }
+}
+
+impl Drop for ConnGuard {
+    fn drop(&mut self) {
+        let mut a = active().lock().unwrap();
+        if self.remote {
+            a.1 = a.1.saturating_sub(1);
+        } else {
+            a.0 = a.0.saturating_sub(1);
+        }
+    }
+}
+
 /// Start (or replace) a proxy on 127.0.0.1:local_port forwarding to target.
 /// `target` is like "https://192.168.1.50:5055".
 pub fn start(local_port: u16, target: String) -> std::io::Result<()> {
@@ -55,6 +97,7 @@ pub fn start(local_port: u16, target: String) -> std::io::Result<()> {
                     let client = client.clone();
                     let target = target.clone();
                     std::thread::spawn(move || {
+                        let _g = ConnGuard::new(false);
                         let _ = handle(stream, &client, &target);
                     });
                 }
@@ -89,6 +132,7 @@ pub fn start_tunnel(local_port: u16, params: crate::relay::ConnectParams) -> std
             Ok((stream, _)) => {
                 let params = params.clone();
                 std::thread::spawn(move || {
+                    let _g = ConnGuard::new(true);
                     let _ = handle_tunnel(stream, &params);
                 });
             }

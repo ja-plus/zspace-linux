@@ -16,12 +16,10 @@ mod vlc;
 use protocol::FrameReader;
 use serde_json::{json, Value};
 use std::env;
-use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use ui::{AppWindow, UiOptions};
 
@@ -33,6 +31,10 @@ pub enum Command {
     MuteToggle,
     AudioNext,
     SubtitleNext,
+    NextEpisode,
+    PrevEpisode,
+    LoadLocalSubtitle,
+    QualityNext,
     RateBy(f32),
     Quit,
 }
@@ -44,21 +46,8 @@ pub enum Event {
 }
 
 // ---------------------------------------------------------------------------
-// logging
+// logging（只写 stderr；自测用重定向收集）
 // ---------------------------------------------------------------------------
-
-static LOG_FILE: OnceLock<Mutex<Option<File>>> = OnceLock::new();
-
-fn init_log() {
-    let file = env::var("ZSPACE_PLAYER_LOG").ok().and_then(|path| {
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .ok()
-    });
-    let _ = LOG_FILE.set(Mutex::new(file));
-}
 
 fn local_now() -> (String, String) {
     unsafe {
@@ -86,16 +75,7 @@ fn local_now() -> (String, String) {
 
 fn log(msg: impl AsRef<str>) {
     let (_, clock) = local_now();
-    let line = format!("[{clock}] [player] {}", msg.as_ref());
-    eprintln!("{line}");
-    if let Some(lock) = LOG_FILE.get() {
-        if let Ok(mut guard) = lock.lock() {
-            if let Some(file) = guard.as_mut() {
-                let _ = writeln!(file, "{line}");
-                let _ = file.flush();
-            }
-        }
-    }
+    eprintln!("[{clock}] [player] {}", msg.as_ref());
 }
 
 // ---------------------------------------------------------------------------
@@ -126,15 +106,11 @@ impl Default for Args {
 
 impl Args {
     /// 只接受官方 `UZPlayer.exe` 的 6 个位置参数，不引入额外命令行选项。
-    fn parse() -> Result<Args, String> {
+    fn parse() -> Args {
         let mut args = Args::default();
         let mut positional: Vec<String> = Vec::new();
         for arg in env::args().skip(1) {
             match arg.as_str() {
-                "-h" | "--help" => {
-                    print_usage();
-                    std::process::exit(0);
-                }
                 other if other.starts_with("--") => {
                     log(format!("忽略未知参数 {other}（原版播放器同样不使用额外参数）"));
                 }
@@ -174,7 +150,7 @@ impl Args {
                 args.username = Some(name.to_string());
             }
         }
-        Ok(args)
+        args
     }
 
     fn server_from_cmd(&self) -> Option<(String, u16)> {
@@ -186,23 +162,6 @@ impl Args {
         let port = server.get("port").and_then(|x| x.as_u64())? as u16;
         Some((ip.to_string(), port))
     }
-}
-
-fn print_usage() {
-    println!(
-        "zspace-player 0.1.0 — 极空间播放器的协议兼容实现（libvlc 后端）\n\
-         \n\
-         用法（与官方 UZPlayer.exe 完全一致）:\n\
-         zspace-player \"<urlencoded {{\\\"server\\\":{{\\\"ip\\\":\\\"127.0.0.1\\\",\\\"port\\\":13612}}}}\"\" <zoom> <x,y> <appName> <lang> username=<user>\n\
-         \n\
-         取不到启动参数时，按原版逻辑回落到 <userData>/<appName>/zspace.conf 的 playerPort。\n\
-         自测用的开关只放在环境变量里（不属于用户选项）：\n\
-         ZSPACE_PLAYER_HEADLESS=1   不开窗口（dummy 输出，CI 自测用）\n\
-         ZSPACE_PLAYER_LOG=<path>   追加日志到文件\n\
-         ZSPACE_PLAYER_DEBUG=1      打开 libvlc 详细日志\n\
-         ZSPACE_VLC_LIB=<path>      指定 libvlc.so.5（默认自动探测）\n\
-         ZSPACE_VLC_PLUGINS=<path>  指定 VLC 插件目录（默认自动探测）\n"
-    );
 }
 
 fn percent_decode(s: &str) -> String {
@@ -238,9 +197,6 @@ fn port_from_conf(app_name: &str) -> Option<u16> {
     }
     if let Ok(home) = env::var("HOME") {
         dirs.push(std::path::PathBuf::from(home).join(".config"));
-    }
-    if let Ok(explicit) = env::var("ZSPACE_PLAYER_USERDATA") {
-        dirs.insert(0, std::path::PathBuf::from(explicit));
     }
     for dir in dirs {
         for candidate in [dir.join(app_name).join("zspace.conf"), dir.join("zspace").join("zspace.conf")] {
@@ -425,6 +381,8 @@ enum PendingKind {
     Audio { index: usize },
     /// 等主进程用 `11/3` 回字幕索引（`11/2`，不重新出地址）。
     Subtitle { index: Option<usize> },
+    /// 等主进程用 `7/3` 回新码流地址（`7/1`）。
+    Quality { index: usize },
 }
 
 struct Pending {
@@ -438,6 +396,19 @@ struct PlayState {
     current_uri: Option<String>,
     audio_ordinal: Option<usize>,
     sub_ordinal: Option<usize>,
+    /// NAS 字幕索引（`subtitle_list[].index`），用于 4/3 上报和外部字幕选择。
+    nas_sub_index: Option<i64>,
+    subtitle_list: Vec<Value>,
+    episode_list: Vec<Value>,
+    episode_index: Option<usize>,
+    collection_info: Option<Value>,
+    /// 5/5 / 5/3 的 playList（版本/码流来源）。
+    play_list: Vec<Value>,
+    /// 7/5 或 playList item 里的码流列表。
+    format_list: Vec<Value>,
+    format_index: Option<usize>,
+    /// 9/x 返回的在线字幕搜索结果（仅保存，无 UI 展示）。
+    online_subs: Vec<Value>,
     tracks_applied: bool,
     tracks_deadline: Instant,
     started_ack: bool,
@@ -460,6 +431,15 @@ impl PlayState {
             current_uri: None,
             audio_ordinal: None,
             sub_ordinal: None,
+            nas_sub_index: None,
+            subtitle_list: Vec::new(),
+            episode_list: Vec::new(),
+            episode_index: None,
+            collection_info: None,
+            play_list: Vec::new(),
+            format_list: Vec::new(),
+            format_index: None,
+            online_subs: Vec::new(),
             tracks_applied: false,
             tracks_deadline: now,
             started_ack: false,
@@ -539,6 +519,34 @@ fn start_item(
     st.current_uri = Some(uri.to_string());
     st.audio_ordinal = field(item, "audio_index").and_then(|v| if v >= 0 { Some(v as usize) } else { None });
     st.sub_ordinal = field(item, "subtitle_index").and_then(|v| if v >= 0 { Some(v as usize) } else { None });
+    st.nas_sub_index = field(item, "subtitle_index").and_then(|v| if v >= 0 || v == -1 { Some(v) } else { None });
+    st.subtitle_list = item
+        .get("subtitle_list")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let formats = item
+        .get("format_list")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if !formats.is_empty() {
+        st.format_list = formats;
+    }
+    st.format_index = field(item, "format_index")
+        .map(|v| v.max(0) as usize)
+        .or_else(|| {
+            let current = item.get("current_fmt").and_then(|v| v.as_str())?;
+            st.format_list
+                .iter()
+                .position(|fmt| fmt.get("mod").and_then(|v| v.as_str()) == Some(current))
+        });
+    if !st.episode_list.is_empty() {
+        let file_path = item.get("file_path").and_then(|v| v.as_str()).unwrap_or("");
+        st.episode_index = st.episode_list.iter().position(|ep| {
+            ep.get("file_path").and_then(|v| v.as_str()) == Some(file_path)
+        });
+    }
     st.subtitle_hash = item
         .get("subtitle_hash")
         .and_then(|v| v.as_str())
@@ -573,7 +581,9 @@ fn progress_payload(st: &PlayState, engine: &vlc::Engine) -> Value {
         "sec": sec,
         "chapter": st.chapter,
         "audio_index": st.audio_ordinal.map(|v| v as i64).unwrap_or(-1),
-        "subtitle_index": st.sub_ordinal.map(|v| v as i64).unwrap_or(-1),
+        "subtitle_index": st
+            .nas_sub_index
+            .unwrap_or_else(|| st.sub_ordinal.map(|v| v as i64).unwrap_or(-1)),
         "subtitle_hash": st.subtitle_hash,
         "subtitle_setting": st.subtitle_setting,
         "video_duration": dur,
@@ -707,7 +717,134 @@ fn apply_pending_fallback(engine: &vlc::Engine, st: &mut PlayState) {
             apply_subtitle(engine, st, index);
             log("等待 11/3 超时，回退本地切字幕");
         }
+        PendingKind::Quality { index } => {
+            log(format!("等待 7/3 超时，码流 {index} 未切换（本地无法回退）"));
+        }
     }
+}
+
+/// `subtitle_list[].url` 是相对路径（实测形如 `/splay/<token>/2.srt`），
+/// 需要拼主进程下发的 `apiHost`；绝对 http(s) 地址原样使用。
+fn absolute_media_url(st: &PlayState, url: &str) -> Option<String> {
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return Some(url.to_string());
+    }
+    if st.api_host.is_empty() || url.is_empty() {
+        return None;
+    }
+    Some(format!("{}{}", st.api_host.trim_end_matches('/'), url))
+}
+
+/// 按 NAS 字幕索引（`subtitle_list[].index`）加载外挂字幕。
+///
+/// 证据：官方真实 playList 的 `subtitle_list[]` 带 `index/url/support_switch/
+/// external/data_source`，url 是 `/splay/<token>/<n>.srt`。索引找不到、或没有
+/// url 时明确记为“待取证”，不猜测切换。
+fn load_nas_subtitle(engine: &vlc::Engine, st: &mut PlayState, index: i64) {
+    if index < 0 {
+        st.nas_sub_index = Some(index);
+        if let Err(e) = engine.set_subtitle_ordinal(None) {
+            log(format!("关闭字幕失败: {e}"));
+        } else {
+            st.sub_ordinal = None;
+            log("字幕 → 关闭");
+        }
+        return;
+    }
+    let entry = st
+        .subtitle_list
+        .iter()
+        .find(|item| field(item, "index") == Some(index))
+        .cloned();
+    let entry = match entry {
+        Some(e) => e,
+        None => {
+            st.nas_sub_index = Some(index);
+            log(format!("字幕索引 {index} 不在 subtitle_list 中（待取证），暂不切换"));
+            return;
+        }
+    };
+    let url = entry.get("url").and_then(|v| v.as_str()).unwrap_or("");
+    let full = match absolute_media_url(st, url) {
+        Some(u) => u,
+        None => {
+            st.nas_sub_index = Some(index);
+            log(format!("字幕 {index} 没有可用 url（apiHost 为空或 url 缺失），待取证"));
+            return;
+        }
+    };
+    match engine.add_subtitle(&full) {
+        Ok(()) => {
+            st.nas_sub_index = Some(index);
+            st.sub_ordinal = None;
+            log(format!(
+                "已加载外挂字幕 index={index} url={full} (external={} support_switch={} data_source={})",
+                entry.get("external").map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+                entry.get("support_switch").map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+                field(&entry, "data_source").map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+            ));
+        }
+        Err(e) => {
+            st.nas_sub_index = Some(index);
+            log(format!("加载外挂字幕 index={index} 失败: {e}"));
+        }
+    }
+}
+
+fn episode_file_path(item: &Value) -> &str {
+    item.get("file_path")
+        .and_then(|v| v.as_str())
+        .or_else(|| item.get("path").and_then(|v| v.as_str()))
+        .unwrap_or("")
+}
+
+/// 剧集列表（12/1）里的上一集/下一集：按官方 `3/1` 语义请主进程重新出地址。
+fn request_episode_switch(st: &mut PlayState, sock: &mut Socket, delta: i32) {
+    if st.episode_list.is_empty() {
+        log("没有剧集列表（12/1 尚未收到），无法切集");
+        return;
+    }
+    let current_path = st
+        .current
+        .as_ref()
+        .map(episode_file_path)
+        .unwrap_or("")
+        .to_string();
+    let current = st
+        .episode_index
+        .or_else(|| st.episode_list.iter().position(|item| episode_file_path(item) == current_path));
+    let len = st.episode_list.len();
+    let target = match current {
+        Some(i) => {
+            let next = i as i32 + delta;
+            if next < 0 || next >= len as i32 {
+                log(if delta > 0 { "已经是最后一集" } else { "已经是第一集" });
+                return;
+            }
+            next as usize
+        }
+        None => {
+            if delta > 0 { 0 } else { len - 1 }
+        }
+    };
+    let item = st.episode_list[target].clone();
+    let file_path = episode_file_path(&item).to_string();
+    let encrypted = item.get("encrypted_path").and_then(|v| v.as_str()).unwrap_or("");
+    let info = if file_path.is_empty() { encrypted } else { &file_path };
+    if info.is_empty() {
+        log(format!("剧集 {target} 没有 file_path/encrypted_path，无法切换"));
+        return;
+    }
+    let mut msg = json!({"f_type": 3, "s_type": 1, "info": info});
+    if !encrypted.is_empty() {
+        msg["encrypted_path"] = json!(encrypted);
+    }
+    st.episode_index = Some(target);
+    log(format!(
+        "发送 3/1 切换剧集: index={target}/{len} info={info} label={}",
+        item.get("label").and_then(|v| v.as_str()).unwrap_or("")
+    ));
+    sock.send(msg);
 }
 
 fn handle_message(v: &Value, engine: &mut vlc::Engine, st: &mut PlayState) -> bool {
@@ -723,6 +860,9 @@ fn handle_message(v: &Value, engine: &mut vlc::Engine, st: &mut PlayState) -> bo
         (Some(5), Some(5)) | (Some(5), Some(1)) => {
             let list = v.get("playList").and_then(|x| x.as_array());
             log(format!("收到播放列表: {} 项", list.map(|a| a.len()).unwrap_or(0)));
+            if let Some(items) = list {
+                st.play_list = items.clone();
+            }
             let item = list.and_then(|items| {
                 items
                     .iter()
@@ -747,6 +887,150 @@ fn handle_message(v: &Value, engine: &mut vlc::Engine, st: &mut PlayState) -> bo
                     play_from_item(engine, st, &item, true);
                 }
                 None => log("播放列表为空"),
+            }
+            false
+        }
+        (Some(5), Some(3)) => {
+            let list = v
+                .get("playList")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            log(format!("收到刷新后的播放列表 5/3: {} 项", list.len()));
+            if !list.is_empty() {
+                st.play_list = list;
+            }
+            false
+        }
+        (Some(7), Some(5)) => {
+            let list = v
+                .get("format_list")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            log(format!("收到码流列表 7/5: {} 项", list.len()));
+            if !list.is_empty() {
+                st.format_list = list;
+            }
+            false
+        }
+        (Some(9), Some(kind)) => {
+            let code = field(v, "code").unwrap_or(200);
+            if code != 200 {
+                log(format!(
+                    "9/{kind} 失败: code={code} message={}",
+                    v.get("message").and_then(|x| x.as_str()).unwrap_or("")
+                ));
+                return false;
+            }
+            let info = v
+                .get("info_list")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let has_info = !info.is_empty();
+            if has_info {
+                log(format!("收到在线字幕结果 9/{kind}: {} 项（无搜索 UI，仅保存）", info.len()));
+                st.online_subs = info;
+            }
+            let subtitles = v
+                .get("subtitle_list")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let has_subtitles = !subtitles.is_empty();
+            if has_subtitles {
+                log(format!("9/{kind} 返回字幕列表: {} 项", subtitles.len()));
+                st.subtitle_list = subtitles;
+            }
+            if let Some(index) = field(v, "subtitle_index") {
+                load_nas_subtitle(engine, st, index);
+            } else if kind == 4 {
+                log(format!(
+                    "9/4 删除字幕结果: code={code} message={}",
+                    v.get("message").and_then(|x| x.as_str()).unwrap_or("")
+                ));
+            } else if !has_info && !has_subtitles {
+                log(format!("9/{kind} 回包没有 info_list/subtitle_list"));
+            }
+            false
+        }
+        (Some(12), Some(0)) => {
+            log(format!(
+                "收到 12/0 片头片尾设置回包: code={:?} message={}（发送入口需要设置 UI）",
+                field(v, "code"),
+                v.get("message").and_then(|x| x.as_str()).unwrap_or("")
+            ));
+            false
+        }
+        (Some(12), Some(1)) => {
+            let list = v
+                .get("videoList")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            log(format!("收到剧集列表 12/1: {} 项", list.len()));
+            st.episode_list = list;
+            let current_path = st.current.as_ref().map(episode_file_path).unwrap_or("");
+            st.episode_index = st
+                .episode_list
+                .iter()
+                .position(|item| episode_file_path(item) == current_path);
+            false
+        }
+        (Some(12), Some(2)) => {
+            let list = v
+                .get("subtitleList")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            log(format!("收到字幕列表 12/2: {} 项", list.len()));
+            if !list.is_empty() {
+                st.subtitle_list = list;
+            }
+            match field(v, "subtitle_index") {
+                Some(index) => load_nas_subtitle(engine, st, index),
+                None => log("12/2 没有 subtitle_index，仅更新字幕列表"),
+            }
+            false
+        }
+        (Some(12), Some(3)) => {
+            let info = v.get("collectionInfo").cloned().unwrap_or(Value::Null);
+            log(format!(
+                "收到合集信息 12/3: collection_id={} title={} skip={} history={}",
+                info.get("collection_id").and_then(|x| x.as_str()).unwrap_or(""),
+                info.get("title").and_then(|x| x.as_str()).unwrap_or(""),
+                info.get("skip").map(|x| x.to_string()).unwrap_or_else(|| "-".into()),
+                info.get("history").map(|x| x.to_string()).unwrap_or_else(|| "-".into()),
+            ));
+            st.collection_info = Some(info);
+            false
+        }
+        (Some(10), Some(kind)) => {
+            let code = field(v, "code").unwrap_or(200);
+            let list = v
+                .get("subtitleList")
+                .or_else(|| v.get("subtitle_list"))
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default();
+            if !list.is_empty() {
+                log(format!("10/{kind} 返回字幕列表: {} 项", list.len()));
+                st.subtitle_list = list;
+            }
+            if code != 200 {
+                log(format!(
+                    "10/{kind} 失败: code={code} message={}",
+                    v.get("message").and_then(|x| x.as_str()).unwrap_or("")
+                ));
+                return false;
+            }
+            if let Some(index) = field(v, "subtitle_index") {
+                load_nas_subtitle(engine, st, index);
+            } else if kind == 3 {
+                log("10/3 已下载字幕到主进程 userData/Subtitles；本地文件加载入口待取证，未接");
+            } else {
+                log(format!("10/{kind} 回复没有 subtitle_index"));
             }
             false
         }
@@ -776,7 +1060,10 @@ fn handle_message(v: &Value, engine: &mut vlc::Engine, st: &mut PlayState) -> bo
                 if let Some(idx) = field(v, "subtitle_index") {
                     let ord = if idx >= 0 { Some(idx as usize) } else { None };
                     apply_subtitle(engine, st, ord);
+                    st.nas_sub_index = Some(idx);
                     log(format!("收到 11/3 字幕结果: subtitle_index={idx}"));
+                } else if matches!((f, s), (Some(6), Some(3))) {
+                    log("收到 6/3（无新地址；对应 6/2 列表请求，官方回包本身不带列表）");
                 } else {
                     log(format!("收到没有 uri 的 {} / {} 回复，忽略", f.unwrap_or(-1), s.unwrap_or(-1)));
                 }
@@ -818,6 +1105,12 @@ fn handle_message(v: &Value, engine: &mut vlc::Engine, st: &mut PlayState) -> bo
                     PendingKind::Subtitle { index } => {
                         st.sub_ordinal = index;
                         log(format!("收到 11/3 字幕结果: subtitle_index={}", index.map(|v| v as i64).unwrap_or(-1)));
+                    }
+                    PendingKind::Quality { index } => {
+                        if item.get("format_index").is_none() {
+                            st.format_index = Some(index);
+                        }
+                        log(format!("收到 7/3 码流切换结果: index={index}"));
                     }
                 }
             } else {
@@ -901,6 +1194,46 @@ fn handle_command(cmd: Command, engine: &mut vlc::Engine, st: &mut PlayState, so
                 }
             };
             request_subtitle_only(st, sock, next);
+        }
+        Command::NextEpisode => request_episode_switch(st, sock, 1),
+        Command::PrevEpisode => request_episode_switch(st, sock, -1),
+        Command::LoadLocalSubtitle => {
+            if st.current.is_none() {
+                log("还没有开始播放，忽略本地字幕请求");
+                return;
+            }
+            log("发送 10/1 请求主进程打开本地字幕选择");
+            sock.send(json!({"f_type": 10, "s_type": 1}));
+        }
+        Command::QualityNext => {
+            if st.current.is_none() {
+                log("还没有开始播放，忽略码流切换");
+                return;
+            }
+            let len = st.format_list.len();
+            if len <= 1 {
+                log("没有可切换的码流（7/4 发送入口缺失，需要清晰度菜单）");
+                return;
+            }
+            let current = st.format_index.unwrap_or(0).min(len - 1);
+            let next = (current + 1) % len;
+            let seek = engine.time_ms() as f64 / 1000.0;
+            let audio = st.audio_ordinal.map(|v| v as i64).unwrap_or(-1);
+            let subtitle = st
+                .nas_sub_index
+                .unwrap_or_else(|| st.sub_ordinal.map(|v| v as i64).unwrap_or(-1));
+            st.pending = Some(Pending { kind: PendingKind::Quality { index: next }, sent_at: Instant::now() });
+            log(format!(
+                "发送 7/1 请求切换码流: result={next}/{len} seek={seek:.1}s audiotrack={audio} subtitle={subtitle}"
+            ));
+            sock.send(json!({
+                "f_type": 7,
+                "s_type": 1,
+                "result": next,
+                "seek": seek,
+                "audiotrack": audio,
+                "subtitle": subtitle,
+            }));
         }
         Command::RateBy(delta) => {
             let rate = engine.set_rate(engine.rate() + delta);
@@ -988,8 +1321,6 @@ fn tick(engine: &mut vlc::Engine, st: &mut PlayState, sock: &mut Socket) {
 
 struct ControllerOptions {
     window_id: Option<u32>,
-    headless: bool,
-    debug: bool,
     vlc_paths: vlc::VlcPaths,
 }
 
@@ -1010,19 +1341,7 @@ fn controller(rx: Receiver<Event>, stream: TcpStream, opts: ControllerOptions) -
         paths.plugins
     ));
 
-    let mut extra_args: Vec<String> = Vec::new();
-    if opts.headless {
-        extra_args.push("--vout=dummy".into());
-        extra_args.push("--aout=dummy".into());
-    }
-    if opts.debug {
-        extra_args.push("--verbose=2".into());
-    }
-    if let Ok(env_args) = env::var("ZSPACE_VLC_ARGS") {
-        extra_args.extend(env_args.split_whitespace().map(|s| s.to_string()));
-    }
-
-    let mut engine = match vlc::Engine::new(&paths, &extra_args) {
+    let mut engine = match vlc::Engine::new(&paths) {
         Ok(e) => e,
         Err(e) => {
             log(format!("libvlc 初始化失败: {e}"));
@@ -1075,28 +1394,12 @@ fn controller(rx: Receiver<Event>, stream: TcpStream, opts: ControllerOptions) -
 // main
 // ---------------------------------------------------------------------------
 
-fn env_flag(name: &str) -> bool {
-    matches!(env::var(name).ok().as_deref(), Some("1") | Some("true") | Some("yes"))
-}
-
 fn main() -> ExitCode {
-    init_log();
-    let args = match Args::parse() {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("参数错误: {e}");
-            print_usage();
-            return ExitCode::from(2);
-        }
-    };
-    let headless = env_flag("ZSPACE_PLAYER_HEADLESS");
-    let debug = env_flag("ZSPACE_PLAYER_DEBUG");
-    let vlc_lib = env::var("ZSPACE_VLC_LIB").ok();
-    let vlc_plugins = env::var("ZSPACE_VLC_PLUGINS").ok();
+    let args = Args::parse();
 
     log(format!(
-        "启动: encoded={:?} zoom={} center={:?} app={} lang={} user={:?} headless={}",
-        args.encoded, args.zoom, args.center, args.app_name, args.lang, args.username, headless
+        "启动: encoded={:?} zoom={} center={:?} app={} lang={} user={:?}",
+        args.encoded, args.zoom, args.center, args.app_name, args.lang, args.username
     ));
 
     // 与原版一致：优先用启动参数里的 server，其次 userData/zspace.conf 的 playerPort。
@@ -1121,7 +1424,7 @@ fn main() -> ExitCode {
     // Resolve libvlc before touching sockets/windows: the bundled Deepin VLC
     // needs its private FFmpeg libraries on LD_LIBRARY_PATH, which only takes
     // effect after a re-exec.
-    let paths = match vlc::resolve_paths(vlc_lib.as_deref(), vlc_plugins.as_deref()) {
+    let paths = match vlc::resolve_paths() {
         Ok(p) => p,
         Err(e) => {
             log(format!("VLC 运行时不可用: {e}"));
@@ -1154,15 +1457,8 @@ fn main() -> ExitCode {
 
     let controller_opts = ControllerOptions {
         window_id: None,
-        headless,
-        debug,
         vlc_paths: paths.clone(),
     };
-
-    if headless {
-        log("headless 模式（自测）：不创建窗口");
-        return controller(rx, stream, controller_opts);
-    }
 
     let width = (1280.0 * args.zoom) as u16;
     let height = (720.0 * args.zoom) as u16;
