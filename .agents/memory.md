@@ -988,3 +988,21 @@
 - 注意：本机 `~/.config/zspace/zspace.conf` 的 `playerPort=13610` 指向另一会话正在跑的
   原生 Electron 主进程；无参数启动会真实连上它（已验证能收到 `100/0`）。后续自测
   不要用默认端口，避免打扰。
+
+## 2026-11-15 播放器收尾：服务端 seek/切轨 + 补丁规格
+
+- 口径（用户强调）：只替掉 `UZPlayer.exe` 一个二进制；参数/协议/行为对齐原版，
+  不新增官方没有的选项或兼容层；不得已偏离要明说。
+- 播放器改动（native/player）：
+  - seek 改走 `11/1`（带 `seek`/`subtitle_index`），等主进程 `11/3` 回新 uri + seek 后续播；
+    切音轨走 `6/1`（`result`/`seek`/`subtitle`），等 `6/3`；只切字幕走 `11/2`，等 `11/3` 只回索引。
+  - 8s 无回复/错误码 → 本地回退（原版无此兜底，README 已标偏离）。
+  - `1/2` 只在换片/换集（5/x、3/2）时发，seek/切轨重新出地址不再重复。
+  - 删掉之前自加的调试 CLI 选项（`--server/--headless/--geometry/...`），
+    只保留官方 6 个位置参数 + `zspace.conf` 的 `playerPort` 回落；测试开关放环境变量。
+- 自测：`selftest/` 假主进程新增 11/1→11/3、6/1→6/3、11/2 回包，
+  用 `/splay/TRANSCODE*` 区分“重新出地址”；**25/25 通过**，单测 9/9。
+- 文档：`README.md` 更新协议表/偏离项/HDR-360 可行性（暂缓，不实现）；
+  新增 `native/player/PATCH-SPEC.md`（6 处 background.js 补丁，含原文/替换串/边界/验证）。
+- 未改 `native/patches/patch_app.py`、`native/run-native.sh`（归主线），未执行 git 操作。
+- 生成物 `selftest/media/`（22MB 样片）与 `selftest/out/` 已 gitignore，不应提交。
