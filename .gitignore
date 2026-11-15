@@ -10,6 +10,10 @@ logs/*
 
 .state/
 
+# 原生调研的工作目录（Electron/解包产物）与 Rust 构建产物
+native/work/
+native/libzrpc/target/
+
 # 临时与中间产物
 *.part
 *.tmp
