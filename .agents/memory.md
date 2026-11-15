@@ -1047,3 +1047,26 @@
 - 大小：92,610,120 B；Installed-Size：328,840 KiB
 - SHA256 `5fab7042ba0079831d27256a7b9c86269495a51d27bc586fec1672b935e05de8`
 - 自检：A1–A18、B1–B15、C1–C6 全过（含 zspace-player 随包、6 处播放器补丁）
+
+## 2026-11-15 mock 中继实证：隧道首帧不是 greet，是直接加密数据段
+
+- 方法：官方 Windows 客户端（`/tmp/zspace-probe-app` Wine 隔离副本 + 临时 prefix）
+  → 本机 mock HTTPS 配置（`plat_url`）→ 本机 TCP mock 中继（自控 RSA + 自签证书）。
+  **未改 hosts / 未动系统证书信任 / 未用账号凭据 / 未连真实 NAS**。
+  脚本 `build/research-material/mock_relay.py`（build/ 已被 gitignore）。
+- 握手成功后**没有**任何 greet/注册/信令。客户端第一条数据就是：
+  `00000002 0801`（transport_header{AC_DATA_SEGMENT}）+
+  `00000066 0862 1262 <98B cipher>`（data_segment_body{size=98,data}）；
+  解密后是应用层裸 HTTP：`GET /home/static/version HTTP/1.1...`。
+- 反向验证：mock 用同样帧回 `HTTP/1.1 200 OK`，本地 `curl` 经 SDK 13595 代理
+  收到完整响应（rc=0）→ 隧道就是加密后的裸字节透传。
+- mock 端 `client_verify_data` 之前 False 的原因：漏了 `sha256(master)` 再取
+  hex 切片（`zsi::crypto::aes::encrypt`）；修掉后 True。
+- 官方 `tcp_specific` connect 请求实抓：
+  `0a065a50524f424510bf2718012002280568ffffffffffffffffff01`
+  = `request_purpose=2(RP_MESSAGE)`、`isp=-1`，**不含** zrpc_addr/request_uuid/is_forward。
+- 已改 `native/libzrpc/src/relay.rs`：purpose 10→2、isp 0→-1、可选字段按官方省略；
+  新增 `connect_request_matches_official_wire` 逐字节单测；`cargo test` 25 过 2 ignored。
+- 结论：帧形态没问题，真实中继 EOF 的剩余差异在 connect 参数；
+  真实中继复测需 NAS 在线，按约定本轮不碰。
+

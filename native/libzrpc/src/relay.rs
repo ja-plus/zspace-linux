@@ -186,7 +186,10 @@ pub fn encode_client_key_exchange(
     client_verify_data_b64: &str,
 ) -> Vec<u8> {
     let mut out = Vec::new();
-    put_uint32(&mut out, 1, result_code);
+    // The official client omits result_code when it is RC_SUCCESS (proto2 default).
+    if result_code != 0 {
+        put_uint32(&mut out, 1, result_code);
+    }
     put_str(&mut out, 2, pre_master_secret_b64);
     put_str(&mut out, 3, client_verify_data_b64);
     out
@@ -568,14 +571,22 @@ impl ConnectParams {
             ztoken: ztoken.into(),
             remote_port: 5055,
             service_type: 1,
-            request_purpose: 10, // RP_REMOTE_NAS_ACCESS
-            device_type: 5,      // DEVT_PC
+            // Captured from the official client's tcp_specific service
+            // (the local web-proxy tunnel): request_purpose = RP_MESSAGE.
+            request_purpose: 2,
+            device_type: 5, // DEVT_PC
             neigh_ip: String::new(),
         }
     }
 }
 
 /// `zrpc_connect_request` — every field the client sets, in proto order.
+///
+/// Wire-identical to the official `tcp_specific` service request captured
+/// against a local mock relay:
+/// `0a065a50524f424510bf2718012002280568ffffffffffffffffff01`
+/// (nas_id, remote_port=5055, service_type=1, request_purpose=2,
+/// device_type=5, isp=-1; no zrpc_addr/request_uuid/is_forward).
 pub fn encode_connect_request(p: &ConnectParams, zrpc_addr: &str, request_uuid: &str) -> Vec<u8> {
     let mut out = Vec::new();
     put_str(&mut out, 1, &p.nas_id);
@@ -589,10 +600,15 @@ pub fn encode_connect_request(p: &ConnectParams, zrpc_addr: &str, request_uuid: 
     if !p.ztoken.is_empty() {
         put_str(&mut out, 7, &p.ztoken);
     }
-    put_str(&mut out, 10, zrpc_addr);
-    put_str(&mut out, 11, request_uuid);
-    put_bool(&mut out, 12, false); // is_forward
-    put_uint32(&mut out, 13, 0); // isp
+    if !zrpc_addr.is_empty() {
+        put_str(&mut out, 10, zrpc_addr);
+    }
+    if !request_uuid.is_empty() {
+        put_str(&mut out, 11, request_uuid);
+    }
+    // isp is int32 and the official client sends -1 (10-byte varint).
+    put_key(&mut out, 13, 0);
+    put_varint(&mut out, u64::MAX);
     out
 }
 
@@ -895,12 +911,10 @@ pub fn open_tunnel(dispatch: Option<&str>, params: &ConnectParams) -> std::io::R
         current = target;
     }
 
-    // 3) greet + connect (ztoken auth)
-    let uuid = rand_uuid()?;
+    // 3) greet + connect (ztoken auth). The official client omits
+    //    zrpc_addr/request_uuid/is_forward for the tcp_specific service.
     let mut batch = encode_frame(&encode_greet(ZRPLGT_ZRPC_CONNECT));
-    batch.extend_from_slice(&encode_frame(&encode_connect_request(
-        params, &current, &uuid,
-    )));
+    batch.extend_from_slice(&encode_frame(&encode_connect_request(params, "", "")));
     stream.write_all(&batch)?;
     let resp = parse_zrpc_response(&read_frame(&mut stream)?);
     if resp.result_code != 0 {
@@ -951,6 +965,17 @@ mod tests {
         let mut out = Vec::new();
         put_varint(&mut out, 300);
         assert_eq!(out, vec![0xac, 0x02]);
+    }
+
+    /// Wire-identical to the official tcp_specific connect request captured
+    /// from the real Windows client against the local mock relay.
+    #[test]
+    fn connect_request_matches_official_wire() {
+        let p = ConnectParams::new("ZPROBE", "");
+        assert_eq!(
+            hex::encode(encode_connect_request(&p, "", "")),
+            "0a065a50524f424510bf2718012002280568ffffffffffffffffff01"
+        );
     }
 
     #[test]

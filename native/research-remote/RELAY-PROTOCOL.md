@@ -160,8 +160,8 @@ proto 完整 schema 可从 dylib 内嵌 FileDescriptorProto 提取（字段号/�
 ### 实现状态（2026-11-15）
 
 - `native/libzrpc/src/relay.rs`：proto 编解码、帧编解码、握手状态机、
-  nibble-swap sha256、session cipher、PKCS#1 RSA、guide/connect 信令、
-  带 fallback 的 dispatch 选择、`Tunnel` 数据面（加密切块）。
+  **标准 lowercase hex sha256**、session cipher（`sha256(master)` 再取 hex 切片）、
+  PKCS#1 RSA、guide/connect 信令、带 fallback 的 dispatch 选择、`Tunnel` 数据面（加密切块）。
 - `proxy.rs`：远程 NAS 走 `start_tunnel`，每个本地连接建一条隧道并双向透传。
 - `ffi.rs`：`start_service` 在无局域网 IP 或 `connect_mode=1`（ForceExternal.txt）
   时走中继；**主代理（simpleStartSerivce）不传 ztoken，远程路径不能以 token
@@ -214,3 +214,46 @@ proto 完整 schema 可从 dylib 内嵌 FileDescriptorProto 提取（字段号/�
 固化后已删除所有临时 hex/顺序/切片/padding 调试开关。
 仍卡住：握手成功后写入任何数据（裸字节/加密 data-segment/greet v2）都会被
 对端立即关闭（0 字节 EOF），下一步需确认握手后第一条隧道消息（zrps greet 等）。
+
+### 2026-11-15 mock 中继实证：握手后首帧（结论）
+
+**方法**：官方 Windows 客户端跑在 Wine 隔离副本（`/tmp/zspace-probe-app` +
+临时 prefix），把 `plat_url` 指到本机 mock HTTPS 配置服务；配置里的 zrpl 指向
+本机 TCP mock 中继（自控 RSA 私钥/自签证书）。未改 hosts、未改系统证书信任、
+未使用账号凭据、未连真实 NAS。脚本：`build/research-material/mock_relay.py`。
+
+**抓到的完整流程**（官方客户端 → mock）：
+
+1. `greet(4) + zrpc_connect_guide{nas_id, guide_ver=2}` → guide 连接用后即关。
+2. 新连接 `greet(1) + zrpc_connect_request`：
+   `0a065a50524f424510bf2718012002280568ffffffffffffffffff01`
+   = `nas_id=ZPROBE, remote_port=5055, service_type=1, request_purpose=2,
+   device_type=5, isp=-1`。
+   **注意：没有 zrpc_addr(10)、request_uuid(11)、is_forward(12)。**
+3. msg.tls 握手（data-segment 包裹）：client_hello → server_hello →
+   client_key_exchange → server_finish；mock 校验 `client_verify_data` 为 True。
+4. **握手后没有任何 greet/注册/信令**。客户端的第一条数据就是：
+
+```
+00 00 00 02 | 08 01                                   <- transport_header{AC_DATA_SEGMENT}
+00 00 00 66 | 08 62 | 12 62 | <98 B ciphertext>       <- data_segment_body{size=98,data}
+```
+
+`size` = 明文长度；`data` = 同长度密文（AES-256-GCM 无 tag，CTR+J0）。
+解密后就是应用层原始字节：`GET /home/static/version HTTP/1.1\r\nHost: ...`。
+
+**反向同样成立**：mock 用同样的 `transport_header + data_segment_body` 加密回
+`HTTP/1.1 200 OK`，本地 `curl` 通过 SDK 的 13595 代理收到了完整响应（rc=0）。
+即隧道是**裸字节透传**，没有额外握手/注册步骤。
+
+**已按实证对齐的代码**：
+- `ConnectParams::new` 的 `request_purpose` 由 10 改为 **2**（RP_MESSAGE，
+  即官方 `tcp_specific`/web 代理隧道的真实值）；`isp` 由 0 改为 **-1**（int32，
+  10 字节 varint）；`zrpc_addr`/`request_uuid`/`is_forward` 按官方行为不再发送。
+- 新增单测 `connect_request_matches_official_wire`，逐字节比对上面抓到的请求。
+- `Tunnel::write_raw/read_raw` 的帧形态与实证一致，无需改动。
+
+**对「真实中继 0 字节 EOF」的解释**：帧形态本身没有问题，剩下的差异在
+connect 请求参数（purpose/isp/可选字段）。真实中继复测需要用户 NAS 在线，
+本轮按约定不碰真实 NAS，留待后续。
+
