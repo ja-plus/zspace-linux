@@ -1070,3 +1070,19 @@
 - 结论：帧形态没问题，真实中继 EOF 的剩余差异在 connect 参数；
   真实中继复测需 NAS 在线，按约定本轮不碰。
 
+## 2026-11-16 真实中继复测通过（NAS 在线）
+
+- 前提：用户确认 NAS 在线；只用本机日志里已有的真实 nas_id 做协议探测，
+  **未用账号凭据、未修改 NAS**，只请求公开接口。
+- 命令：`ZRPC_NAS_ID=<本机日志 nas_id> cargo test live_relay_http_probe -- --ignored --nocapture`
+- 结果：guide `dispatch-yz:9091` → 中继 `223.111.129.16:9091`；`connect ok`；
+  `/key/pub?webagent=v2&rnd=probe` 返回 779B `HTTP/1.1 200 OK`（NAS 公钥 JSON）；
+  `/home/static/version` 返回 325B `HTTP/1.1 200 OK`；**不再 0 字节 EOF**。
+- 真实链路帧形态（临时 `ZRPC_WIRE_LOG` 抓取，验证后已移除）：
+  上行 `00000002 0801` + `00000047 0843 1243 <67B>`；
+  下行 `00000002 0801` + `0000014b 08c502 12c502 <325B>`；
+  与官方客户端抓包（`00000002 0801` + `00000066 0862 1262 <98B>`）同构。
+- 结论：远程中继路径 guide→connect→msg.tls→加密切块 端到端可用；
+  后续远程 NAS 访问不再需要协议层排障。
+
+

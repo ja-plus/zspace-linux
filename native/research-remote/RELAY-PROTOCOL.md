@@ -212,8 +212,8 @@ proto 完整 schema 可从 dylib 内嵌 FileDescriptorProto 提取（字段号/�
    → `base64::decode` → `rsa::decrypt`（内部再 decode 一次）与之对称。
 
 固化后已删除所有临时 hex/顺序/切片/padding 调试开关。
-仍卡住：握手成功后写入任何数据（裸字节/加密 data-segment/greet v2）都会被
-对端立即关闭（0 字节 EOF），下一步需确认握手后第一条隧道消息（zrps greet 等）。
+当时遗留：握手成功后写入任何数据都会被对端立即关闭（0 字节 EOF）。
+后经 mock 抓包与 connect 参数对齐，已在 2026-11-16 真实中继复测通过（见下）。
 
 ### 2026-11-15 mock 中继实证：握手后首帧（结论）
 
@@ -256,4 +256,25 @@ proto 完整 schema 可从 dylib 内嵌 FileDescriptorProto 提取（字段号/�
 **对「真实中继 0 字节 EOF」的解释**：帧形态本身没有问题，剩下的差异在
 connect 请求参数（purpose/isp/可选字段）。真实中继复测需要用户 NAS 在线，
 本轮按约定不碰真实 NAS，留待后续。
+
+### 2026-11-16 真实中继复测：通过
+
+- 条件：用户确认 NAS 在线；只用本机日志里已有的 nas_id 做协议探测，
+  **未使用账号凭据、未修改 NAS 任何内容**，只请求公开接口。
+- 命令：`ZRPC_NAS_ID=<local-log nas_id> cargo test live_relay_http_probe -- --ignored --nocapture`
+- 结果：
+  - guide：`dispatch-yz.zenithspace.net:9091` → 中继节点 `223.111.129.16:9091`；
+  - `connect ok`（鉴权/信令通过）；
+  - `/key/pub?webagent=v2&rnd=probe` → `HTTP/1.1 200 OK`，779 字节，
+    body 为 NAS 公钥 JSON；
+  - `/home/static/version` → `HTTP/1.1 200 OK`，325 字节（`Content-Length: 14`）；
+  - 不再出现握手后 0 字节 EOF。
+- 真实链路上的帧形态（临时 `ZRPC_WIRE_LOG` 抓取，验证后已移除该调试代码）：
+  - 上行：`00000002 0801` + `00000047 0843 1243 <67B cipher>`
+    （`transport_header{AC_DATA_SEGMENT}` + `data_segment_body{size=67,data}`）；
+  - 下行：`00000002 0801` + `0000014b 08c502 12c502 <325B cipher>`。
+  - 与官方客户端抓包（`00000002 0801` + `00000066 0862 1262 <98B>`）同构，
+    `size` 均为明文长度、密文同长。
+- 结论：远程中继路径（guide → connect → msg.tls → 加密切块隧道）端到端可用。
+
 
