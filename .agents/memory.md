@@ -948,3 +948,43 @@
 - 临时调试开关（**交付前必须清理**）：`ZRPC_HEX_STD`、`ZRPC_KEY_STD`、
   `ZRPC_ORDER`、`ZRPC_VERIFY_CLIENT`、`ZRPC_SLICE`、`ZRPC_RSA_OAEP`、
   `ZRPC_SWAP_FIELDS`、`ZRPC_NO_ENCODE_PUBKEY`。
+
+## 2026-11-15 原生播放器 MVP：协议兼容的 zspace-player（libvlc）
+
+- 背景：替代 Windows `UZPlayer.exe`，Linux 原生进程直连主进程 TCP、用系统 libvlc 播放。
+  口径（用户强调）：只替掉那一个二进制，参数/协议/配置回落对齐原版；
+  不加原版没有的兼容层/播放器适配/新选项；不可避免的偏离要明说。
+- 产物：
+  - 代码 `native/player/`（Rust；`src/protocol.rs` 帧协议、`src/vlc.rs` dlopen libvlc、
+    `src/ui.rs` x11rb 窗口、`src/main.rs` 状态机）
+  - 二进制 `native/player/target/release/zspace-player`（约 1 MB）
+  - 文档 `native/player/README.md`；自测 `native/player/selftest/`
+- 协议要点（从 app.asar `background.js` 源码复核，校正了 plan 的两处细节）：
+  - 下行帧 = `len=<base64字符数>{<base64(JSON)`，**无结尾花括号**；
+    上行是**裸 JSON**（不是帧），主进程直接 `JSON.parse(chunk)`，
+    所以播放器必须一条消息一次 write + TCP_NODELAY + 消息间隔 25ms。
+  - 官方启动参数 6 个：urlencoded `{server:{ip,port}}`、zoom、`x,y`、appName、lang、`username=`；
+    取不到就回落 `<userData>/<appName>/zspace.conf` 的 `playerPort`。
+  - 只有 `4/1` 心跳不写日志；`1/2`、`4/3`、`1/3` 的字段实测见 `main.old.log`。
+- 关键坑：
+  1. **字幕 API**：`libvlc_video_get_track_description` 是视频轨；字幕必须用
+     `libvlc_video_get_spu_description` / `libvlc_video_set_spu`。
+  2. Deepin 商店版 VLC 是 AppImage 布局，插件依赖 `files/ffmpeg445/lib` 的
+     `libavcodec.so.58` 等；`LD_LIBRARY_PATH` 必须在进程启动前生效，
+     程序检测到捆绑 VLC 后会用新的 `LD_LIBRARY_PATH` **exec 自身一次**
+     （`ZSPACE_PLAYER_ENV_READY=1` 防重入），并 `VLC_PLUGIN_PATH` 指向插件目录。
+  3. 系统 `libvlc5` 有运行库但**没有插件目录**，单用会播放失败；
+     解析 VLC 路径时必须把 (lib, core, plugins) 作为一套来选。
+  4. `--plugin-path` 在 VLC 3.0 已废弃，插件目录只能靠 `VLC_PLUGIN_PATH`。
+  5. 控制器线程结束时主线程还停在 UI 事件循环 → 进程不退出；
+     用 `JoinHandle::is_finished()` 收尾（否则 mock 发 0 后播放器看似卡住）。
+- 已实现：下行 `100/0`、`5/5|5/1`、`3/2`、`11/3`、`7/3`、`6/3`、`8/1`（仅日志）、`0`；
+  上行 `1/2`、`4/3`、`4/1`、`1/3`；播放/暂停/seek/音量/全屏/关闭/倍速/音轨/字幕（本地）。
+- 未实现：`3/1`、`5/2`、`6/1|2`、`7/1|4`、`11/1|2`、`9/x`、`10/x`、`12/0|1|2|3`。
+- 偏离（README 已列）：VLC 3 无 placebo → HDR/DV 降 SDR；无官方 Qt 控制条/菜单；
+  seek/切轨只本地做，不走 `11/1`/`6/1` 重新取地址；`8/1` 不弹窗。
+- 自测：`native/player/selftest/run_selftest.sh`（假主进程 + Range HTTP + 多轨样片 +
+  xdotool + 截图），**21/21 通过**；证据 `selftest/out/`（mock.jsonl/player.log/截图）。
+- 注意：本机 `~/.config/zspace/zspace.conf` 的 `playerPort=13610` 指向另一会话正在跑的
+  原生 Electron 主进程；无参数启动会真实连上它（已验证能收到 `100/0`）。后续自测
+  不要用默认端口，避免打扰。

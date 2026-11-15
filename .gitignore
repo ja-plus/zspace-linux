@@ -14,6 +14,8 @@ logs/*
 native/work/
 native/libzrpc/target/
 native/player/target/
+native/player/selftest/media/
+native/player/selftest/out/
 
 # 临时与中间产物
 *.part

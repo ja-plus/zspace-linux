@@ -1,0 +1,22 @@
+[package]
+name = "zspace-player"
+version = "0.1.0"
+edition = "2021"
+description = "Protocol-compatible native player for the ZSpace desktop client (libvlc backend)"
+license = "MIT"
+
+[[bin]]
+name = "zspace-player"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+libc = "0.2"
+libloading = "0.8"
+serde_json = "1"
+x11rb = { version = "0.13", default-features = false, features = ["allow-unsafe-code"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
