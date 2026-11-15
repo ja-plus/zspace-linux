@@ -169,6 +169,10 @@ real_payload() {
     if [ -f "$FILES_DIR/electron/chrome-sandbox" ]; then
         chmod 0644 "$FILES_DIR/electron/chrome-sandbox"
     fi
+
+    # asar 解包产物可能带 0600（如 background.js）；装到 /opt 后应用以普通
+    # 用户运行，必须可读。a+rX 只给目录/已有可执行位补 x，不会误加可执行。
+    chmod -R a+rX "$FILES_DIR"
 }
 
 if [ -n "$PAYLOAD_DIR" ] && [ "$FORCE_FAKE" -eq 0 ]; then
@@ -257,6 +261,7 @@ expect A9 "desktop 名 = 包名" bash -c "dpkg-deb -c '$DEB' | grep -q '\./usr/s
 expect A10 "/usr/bin/$PKG 启动器在位" bash -c "dpkg-deb -c '$DEB' | grep -q '\./usr/bin/$PKG$'"
 expect A11 "deb 文件名无中文/非 ASCII" bash -c "! printf '%s' '$DEB_NAME' | LC_ALL=C grep -q '[^ -~]'"
 expect A12 "图标随包" bash -c "dpkg-deb -c '$DEB' | grep -q '256x256/apps/$PKG.png'"
+expect A19 "包内文件对普通用户可读" bash -c "[ -z \"\$(find '$STAGE' -type f ! -perm -004 -print -quit)\" ]"
 # 真实载荷专属：二进制必须是 ELF（假载荷是零填充，不检查）
 if [ -n "$PAYLOAD_DIR" ]; then
     expect A13 "electron 是 ELF" is_elf "$FILES_DIR/electron/electron"

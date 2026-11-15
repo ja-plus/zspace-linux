@@ -1085,4 +1085,30 @@
 - 结论：远程中继路径 guide→connect→msg.tls→加密切块 端到端可用；
   后续远程 NAS 访问不再需要协议层排障。
 
+## 2026-11-16 产物 native.4 + 打包自检（含两处修复）
+
+- 产物：`build/com.zspace.native.spark_2.46.2026101501+native.4-1_amd64.deb`
+- 大小：92,628,712 B；Installed-Size：328,832 KiB
+- SHA256 `3c1046da9b42f4c94a84c8881dda00298df42edad40d96733423eb9c8f662f6a`
+- 载荷：官方 V2.46.2026101501 解包 + Electron 33.3.1 linux-x64 +
+  当前 `libzrpc.so`（SHA256 `66895fb9…`，已在包内核对）+ `zspace-player`
+- 脚本自检：A1–A19、B1–B15、C1–C6 全过（`build/native-verify-report.txt`）
+- 本轮发现并修复：
+  1. **`ffi.rs` 的 request_purpose 默认值 0 → 2**：JS 的 `start_service`
+     不传该字段，官方 SDK 对 tcp_specific 实际发 RP_MESSAGE(2)。
+     实测 purpose=0 也能通，但按原版口径改为 2。
+  2. **包内 `background.js` 是 0600**（asar 解包带入），普通用户启动读不到。
+     构建脚本增加 `chmod -R a+rX $FILES_DIR`，并新增自检 A19；
+     checklist 增加 A11（包内文件普通用户可读）。
+- 按 `.agents/checklist.md` 映射（原生包）：
+  - 适用且通过：A1/A3/A4/A7/A8/A9/A10/A11、B1/B6、C1(脚本层)/C3、D1/D2/D3、E1
+  - 不适用：A2（包名是 `com.zspace.native.spark`）、A5/A6（不打包 exe/asar，
+    改为解包 app 目录）、B2–B5/B8（Wine 字体链）、E2–E5（不依赖 Wine）、F1（原生 Chromium 不加 wgpu 补丁）
+  - 待实测：B5（原生 Electron 的字体回退 CDP）、B7（run.sh 未 unset
+    WAYLAND_DISPLAY，treeland 需真机验证）、F2–F4（性能/画面）、C1/C2（用户安装启动）、E6
+- 偏差：原生包走 `packaging-native/`，与 Wine 包 `packaging/` 并存；
+  不投稿星火、仅个人使用（改动了官方产物）。
+- D3：`.agents/sources.md` 已有 V2.46.2026101501，无需追加。
+
+
 

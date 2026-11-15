@@ -20,6 +20,7 @@
 | A8 | `postrm` 清容器 | `dpkg-deb -I $DEB` 能看到 postrm，内容含 `~/.deepinwine/com.zspace.spark` | ✅ |
 | A9 | 无提权操作 | `grep -E 'chmod 4755|chown root'` 在 run.sh/postinst/postrm 里均无命中 | ✅ |
 | A10 | deb 文件名无中文 | 文件名是 `com.zspace.spark_<ver>-<rev>_amd64.deb` | ✅ |
+| A11 | 包内文件普通用户可读 | `find $STAGE -type f ! -perm -004` 无输出（asar 解包常带 0600） | ✅ |
 
 ## B. 启动器与中文渲染
 

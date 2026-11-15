@@ -171,7 +171,10 @@ pub extern "C" fn libzrpc_start_service(enc_cfg: *const c_char) -> *const c_char
             ztoken: cfg["ztoken"].as_str().unwrap_or("").to_string(),
             remote_port: remote_port as u32,
             service_type: cfg["type"].as_u64().unwrap_or(1) as u32,
-            request_purpose: cfg["request_purpose"].as_u64().unwrap_or(0) as u32,
+            // The JS start_service config omits request_purpose for tcp_specific
+            // services; the official SDK then sends RP_MESSAGE (2). Only sync
+            // (7) and rclone (8) pass an explicit value.
+            request_purpose: cfg["request_purpose"].as_u64().unwrap_or(2) as u32,
             device_type: if device_type == "mac" { 4 } else { 5 },
             neigh_ip: cfg["neigh_ip"].as_str().unwrap_or("").to_string(),
         };
