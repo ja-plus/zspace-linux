@@ -31,11 +31,22 @@ if [ ! -f "$SO" ] && command -v cargo >/dev/null 2>&1; then
     echo "== building libzrpc.so =="
     (cd "$HERE/libzrpc" && cargo build --release) || { echo "libzrpc build failed"; exit 1; }
 fi
-if [ -d "$APP" ] && [ -f "$SO" ]; then
-    # Idempotent: linux dll branch + drop win32 .node + install sdk/libzrpc.so
-    python3 "$HERE/patches/patch_app.py" "$APP" "$SO" || { echo "app patch failed"; exit 1; }
+
+# Native player (replaces uzplayer/UZPlayer.exe). Same build-on-demand rule.
+PLAYER="$HERE/player/target/release/zspace-player"
+if [ ! -f "$PLAYER" ] && command -v cargo >/dev/null 2>&1; then
+    echo "== building zspace-player =="
+    (cd "$HERE/player" && cargo build --release) || { echo "player build failed"; exit 1; }
+fi
+
+if [ -d "$APP" ]; then
+    # Electron doubles as Node for the background.js syntax check.
+    [ -x "$ELECTRON" ] && export ZS_NODE="$ELECTRON"
+    # Idempotent: dll branch + 6 player patches + sdk/libzrpc.so + uzplayer/zspace-player
+    python3 "$HERE/patches/patch_app.py" "$APP" "${SO:-}" "${PLAYER:-}" \
+        || { echo "app patch failed"; exit 1; }
 else
-    echo "warning: $APP or $SO missing; app not patched" >&2
+    echo "warning: $APP missing; app not patched" >&2
 fi
 
 exec "$ELECTRON" "$APP" "$@"

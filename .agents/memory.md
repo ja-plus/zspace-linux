@@ -1006,3 +1006,44 @@
   新增 `native/player/PATCH-SPEC.md`（6 处 background.js 补丁，含原文/替换串/边界/验证）。
 - 未改 `native/patches/patch_app.py`、`native/run-native.sh`（归主线），未执行 git 操作。
 - 生成物 `selftest/media/`（22MB 样片）与 `selftest/out/` 已 gitignore，不应提交。
+
+## 2026-11-15 中继 rc=2 攻破：标准 hex + RSA 双 base64；播放器补丁接入
+
+- **rc=2 根因（已实证）**：
+  1. `master_secret`/AES key 派生用的是**标准 lowercase hex**，不是之前静态误判的
+     nibble-swap；换标准 hex 后真实中继握手通过（server_finish 不再报 2）。
+  2. `encrypt_pre_master_secret` 对 RSA 输出做了**两次 base64**
+     （`rsa::encrypt` 内一次 + 外层再一次）；已改为双 base64。
+  - 证据：`ZRPC_NAS_ID=<真实 nas> cargo test live_relay_http_probe -- --ignored`
+    输出 `connect ok via 223.111.129.15:9091`，不再出现 server_finish rc=2。
+  - 已把标准 hex 固化为默认并删除全部 ZRPC_HEX_STD/KEY_STD/ORDER/SLICE/
+    VERIFY_CLIENT/RSA_OAEP/SWAP_FIELDS/NO_ENCODE_PUBKEY 调试开关。
+- **仍卡住**：握手成功后，隧道写入任何数据（裸字节 / 加密 data-segment /
+  先发 greet v2 / public greet v2）都会立刻被对端关闭（读 0 字节 EOF）。
+  未发控制帧。下一步：对照官方客户端在握手后发的第一条隧道消息
+  （可能需 `zrpl_greet_request` 或 zrps 侧 greet），或抓官方客户端真实隧道。
+- **播放器补丁（已完成）**：
+  - `patch_app.py` 接入 PATCH-SPEC 的 6 处补丁（幂等、写前用 Electron
+    `--check` 语法校验），并把 `zspace-player` 装到 `app/uzplayer/`（0755）。
+  - `run-native.sh` 自动构建 libzrpc.so / zspace-player 后打补丁；
+    `build_native_deb.sh` 同样要求播放器随包，并新增 A17/A18 自检。
+  - 实机：main.log 的 `VLC video player path:` 已指向 `uzplayer/zspace-player`，
+    无 VlcPreload 报错；用官方 6 参数手动拉起播放器，主进程日志出现
+    `Player server been connected`，播放器日志 `已连接主进程`。
+    **100/0 需从界面发起播放（需登录），暂未验证到那一步。**
+- 一致性审计（本轮）：
+  - 已对齐：`set_private_network_access` 返回 2/1（app 以 >1 判成功）、
+    `get_nas_status` 的 connected/conn_type、远程选路（无 IP 或 connect_mode=1，
+    ztoken 可选）、握手 hex/双 base64、播放器 6 处补丁与 kill 命令。
+  - 已知偏离（未修，非阻塞）：`detect_nas` 返回空（官方会探测 LAN IP）、
+    `check_ports` 返回空、`network_diagnose`/`link_diagnose` 为空壳、
+    `get_nas_status.online` 恒 true；`/splay` 不注入 webagent/rnd 待 NAS 实测。
+  - 启动器差异（必要）：`ELECTRON_DISABLE_SANDBOX=1`、unset 代理与 NODE_*、
+    不追加 Chromium 开关；与官方 Windows 行为不同但为 Linux 运行所需。
+
+### 产物 native.3（含播放器与握手修复）
+
+- 路径：`build/com.zspace.native.spark_2.46.2026101501+native.3-1_amd64.deb`
+- 大小：92,610,120 B；Installed-Size：328,840 KiB
+- SHA256 `5fab7042ba0079831d27256a7b9c86269495a51d27bc586fec1672b935e05de8`
+- 自检：A1–A18、B1–B15、C1–C6 全过（含 zspace-player 随包、6 处播放器补丁）

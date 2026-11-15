@@ -202,3 +202,15 @@ proto 完整 schema 可从 dylib 内嵌 FileDescriptorProto 提取（字段号/�
   （RC_VERIFY_DATA_FAILED）；rc=2 同时覆盖 RSA 解密失败与 verify 不匹配。
   已排除了 hex 风格/拼接顺序/切片/RSA padding/字段顺序/encode_pubkey 等变体。
   下一步需用官方客户端 + 自控 mock 中继抓真实握手反推公式。
+
+### 2026-11-15 实机攻破：rc=2 的两处根因
+
+1. **sha256 hex 是标准 lowercase hex**，不是静态误判的 nibble 交换。
+   换标准 hex 后真实中继握手通过（server_finish rc=0）。
+2. **pre_master_secret 是双 base64**：`rsa::encrypt` 内部先 base64 一次，
+   `encrypt_pre_master_secret` 外层再编码一次；服务端 `decrypt_pre_master_secret`
+   → `base64::decode` → `rsa::decrypt`（内部再 decode 一次）与之对称。
+
+固化后已删除所有临时 hex/顺序/切片/padding 调试开关。
+仍卡住：握手成功后写入任何数据（裸字节/加密 data-segment/greet v2）都会被
+对端立即关闭（0 字节 EOF），下一步需确认握手后第一条隧道消息（zrps greet 等）。

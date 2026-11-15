@@ -17,9 +17,9 @@
 //! * `rsa::load_public_key_from_str` — `PEM_read_bio_RSA_PUBKEY`
 //!   (`-----BEGIN PUBLIC KEY-----`)
 //! * `rsa::encrypt` — `RSA_public_encrypt(..., RSA_PKCS1_PADDING)` + base64
-//! * `zsi::crypto::sha256::result` — lowercase hex table, but it appends the
-//!   **low nibble first**, i.e. each digest byte is emitted byte-swapped.
-//!   Reproduced by [`swapped_sha256_hex`].
+//! * `zsi::crypto::sha256::calc` — standard lowercase hex. (Static reading
+//!   once suggested nibble-swapped output; the live relay rejected that and
+//!   accepted standard hex, so [`handshake_sha256_hex`] is authoritative.)
 //! * `tls_connection::encrypt_data` — `aes::encrypt(key = master_secret, …)`
 //!   and `aes::encrypt` = SHA-256(master_secret) → key = hex_ascii[0..32],
 //!   iv = hex_ascii[0..16], AES-256-GCM, no auth tag.
@@ -155,8 +155,7 @@ pub fn encode_client_hello(client_rand: &str) -> Vec<u8> {
     let mut out = Vec::new();
     put_uint32(&mut out, 1, TLS_PROTO_VERSION);
     put_str(&mut out, 2, client_rand);
-    let encode_pubkey = std::env::var("ZRPC_NO_ENCODE_PUBKEY").ok().as_deref() != Some("1");
-    put_bool(&mut out, 3, encode_pubkey);
+    put_bool(&mut out, 3, true); // encode_pubkey
     out
 }
 
@@ -188,13 +187,8 @@ pub fn encode_client_key_exchange(
 ) -> Vec<u8> {
     let mut out = Vec::new();
     put_uint32(&mut out, 1, result_code);
-    if std::env::var("ZRPC_SWAP_FIELDS").ok().as_deref() == Some("1") {
-        put_str(&mut out, 2, client_verify_data_b64);
-        put_str(&mut out, 3, pre_master_secret_b64);
-    } else {
-        put_str(&mut out, 2, pre_master_secret_b64);
-        put_str(&mut out, 3, client_verify_data_b64);
-    }
+    put_str(&mut out, 2, pre_master_secret_b64);
+    put_str(&mut out, 3, client_verify_data_b64);
     out
 }
 
@@ -328,61 +322,35 @@ pub fn decode_data_segment(data: &[u8], cipher: Option<&CipherKey>) -> Vec<u8> {
 /// `zsi::crypto::sha256::result` emits each digest byte **low nibble first**
 /// (lowercase table). This is not standard `hex::encode`, but both peers use
 /// the same routine, so we must reproduce the quirk byte-for-byte.
-pub fn swapped_sha256_hex(data: &[u8]) -> String {
+/// `zsi::crypto::sha256::calc` output as used by the handshake. Verified
+/// against the live relay: the server accepts **standard lowercase hex**
+/// (`hex::encode`), not a nibble-swapped variant.
+pub fn handshake_sha256_hex(data: &[u8]) -> String {
     use sha2::{Digest, Sha256};
-    let digest = Sha256::digest(data);
-    if std::env::var("ZRPC_HEX_STD").ok().as_deref() == Some("1") {
-        return hex::encode(digest);
-    }
-    let mut s = String::with_capacity(digest.len() * 2);
-    for b in digest {
-        let low = b & 0x0f;
-        let high = b >> 4;
-        s.push(char::from_digit(low as u32, 16).unwrap());
-        s.push(char::from_digit(high as u32, 16).unwrap());
-    }
-    s
+    hex::encode(Sha256::digest(data))
 }
 
 /// Key/iv derivation used by `zsi::crypto::aes::encrypt`:
 /// sha256(secret) → hex → key = ascii hex[0..32], iv = ascii hex[0..16].
 pub fn session_cipher(secret: &str) -> CipherKey {
-    let hexstr = if std::env::var("ZRPC_KEY_STD").ok().as_deref() == Some("1") {
-        use sha2::{Digest, Sha256};
-        hex::encode(Sha256::digest(secret.as_bytes()))
-    } else {
-        swapped_sha256_hex(secret.as_bytes())
-    };
+    let hexstr = handshake_sha256_hex(secret.as_bytes());
     let mut key = [0u8; 32];
     let mut iv = [0u8; 16];
-    let slice = std::env::var("ZRPC_SLICE").unwrap_or_else(|_| "1".into());
-    let (ko, io) = match slice.as_str() {
-        "2" => (0usize, 16usize),
-        "3" => (32usize, 0usize),
-        "4" => (32usize, 16usize),
-        _ => (0usize, 0usize),
-    };
-    key.copy_from_slice(&hexstr.as_bytes()[ko..ko + 32]);
-    iv.copy_from_slice(&hexstr.as_bytes()[io..io + 16]);
+    key.copy_from_slice(&hexstr.as_bytes()[0..32]);
+    iv.copy_from_slice(&hexstr.as_bytes()[0..16]);
     CipherKey { key, iv }
 }
 
 /// `generate_master_secret`: sha256(client_rand || server_rand || pre_master)
 /// as the swapped hex string.
 pub fn master_secret(client_rand: &str, server_rand: &str, pre_master_secret: &str) -> String {
-    let order = std::env::var("ZRPC_ORDER").unwrap_or_else(|_| "csp".into());
     let mut concat = String::with_capacity(
         client_rand.len() + server_rand.len() + pre_master_secret.len(),
     );
-    for ch in order.chars() {
-        match ch {
-            'c' => concat.push_str(client_rand),
-            's' => concat.push_str(server_rand),
-            'p' => concat.push_str(pre_master_secret),
-            _ => {}
-        }
-    }
-    swapped_sha256_hex(concat.as_bytes())
+    concat.push_str(client_rand);
+    concat.push_str(server_rand);
+    concat.push_str(pre_master_secret);
+    handshake_sha256_hex(concat.as_bytes())
 }
 
 /// `generate_{client,server}_verify_data`: base64(AES-GCM(master_secret, data)).
@@ -393,26 +361,23 @@ pub fn verify_data(master_secret: &str, data: &str) -> String {
 }
 
 /// `rsa::encrypt`: base64(RSA_PKCS1(server_pub_key, pre_master_secret)).
+///
+/// The official `encrypt_pre_master_secret` encodes **twice**: `rsa::encrypt`
+/// already returns base64(ciphertext), then the caller base64-encodes that
+/// string again. The server mirrors it (base64::decode → rsa::decrypt, which
+/// base64-decodes once more). Sending a single base64 makes the server's RSA
+/// decrypt fail and it answers `server_finish.result_code = 2`.
 pub fn encrypt_pre_master(
     server_pub_key_pem: &str,
     pre_master_secret: &str,
 ) -> Result<String, String> {
     let key =
         RsaPublicKey::from_public_key_pem(server_pub_key_pem.trim()).map_err(|e| e.to_string())?;
-    if std::env::var("ZRPC_RSA_OAEP").ok().as_deref() == Some("1") {
-        let ct = key
-            .encrypt(
-                &mut OsRng,
-                rsa::Oaep::new::<sha2::Sha256>(),
-                pre_master_secret.as_bytes(),
-            )
-            .map_err(|e| e.to_string())?;
-        return Ok(base64::engine::general_purpose::STANDARD.encode(ct));
-    }
     let ct = key
         .encrypt(&mut OsRng, Pkcs1v15Encrypt, pre_master_secret.as_bytes())
         .map_err(|e| e.to_string())?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(ct))
+    let once = base64::engine::general_purpose::STANDARD.encode(ct);
+    Ok(base64::engine::general_purpose::STANDARD.encode(once.as_bytes()))
 }
 
 /// `server_pub_key` arrives base64-encoded (base64 of the PEM text). Accept
@@ -487,12 +452,7 @@ impl Handshake {
 
     pub fn client_key_exchange(&self) -> Result<Vec<u8>, String> {
         let pre_master_b64 = encrypt_pre_master(&self.server_pub_key, &self.pre_master_secret)?;
-        let verify_input = if std::env::var("ZRPC_VERIFY_CLIENT").ok().as_deref() == Some("1") {
-            &self.client_rand
-        } else {
-            &self.server_rand
-        };
-        let verify = verify_data(&self.master_secret, verify_input);
+        let verify = verify_data(&self.master_secret, &self.server_rand);
         Ok(encode_client_key_exchange(0, &pre_master_b64, &verify))
     }
 
@@ -797,6 +757,14 @@ pub struct Tunnel {
 }
 
 impl Tunnel {
+    /// Write one protobuf message after the handshake: `[4B len][msg]` inside
+    /// an encrypted data segment (the official message_io path).
+    pub fn write_message(&mut self, msg: &[u8]) -> std::io::Result<()> {
+        let payload = encode_frame(msg);
+        let wire = encode_data_segment(&payload, Some(&self.cipher));
+        self.stream.write_all(&wire)
+    }
+
     /// Write raw tunnel bytes (already framed as one or more data segments).
     pub fn write_raw(&mut self, data: &[u8]) -> std::io::Result<()> {
         let wire = encode_data_segment(data, Some(&self.cipher));
@@ -1006,10 +974,9 @@ mod tests {
     }
 
     #[test]
-    fn swapped_hex_is_byte_nibble_swapped() {
+    fn sha256_hex_is_standard() {
         // sha256("abc") = ba7816bf8f01cfea414140de5dae2223...
-        let s = swapped_sha256_hex(b"abc");
-        assert!(s.starts_with("ab8761fb")); // ba -> ab, 78 -> 87, 16 -> 61, bf -> fb
+        assert!(handshake_sha256_hex(b"abc").starts_with("ba7816bf"));
     }
 
     #[test]
@@ -1098,8 +1065,11 @@ mod tests {
 
         let pre = "C".repeat(64);
         let b64 = encrypt_pre_master(&pem, &pre).expect("encrypt");
-        let ct = base64::engine::general_purpose::STANDARD
+        let inner = base64::engine::general_purpose::STANDARD
             .decode(b64.as_bytes())
+            .unwrap();
+        let ct = base64::engine::general_purpose::STANDARD
+            .decode(inner)
             .unwrap();
         let pt = private.decrypt(Pkcs1v15Encrypt, &ct).expect("decrypt");
         assert_eq!(pt, pre.as_bytes());
@@ -1204,6 +1174,10 @@ mod tests {
             }
             let ct = base64::engine::general_purpose::STANDARD
                 .decode(pre_b64.as_bytes())
+                .unwrap();
+            // The client sends base64(base64(rsa_ciphertext)).
+            let ct = base64::engine::general_purpose::STANDARD
+                .decode(ct)
                 .unwrap();
             let pre = private.decrypt(Pkcs1v15Encrypt, &ct).expect("rsa decrypt");
             let pre = String::from_utf8(pre).unwrap();
@@ -1344,6 +1318,27 @@ mod tests {
         let params = ConnectParams::new(nas, "");
         let mut t = open_tunnel(Some(&dispatch), &params).expect("open_tunnel");
         let _ = t.set_read_timeout(Some(Duration::from_secs(15)));
+        // Optional post-handshake greeting (debug): the relay may expect the
+        // HTTP header via zrpl_greet_request_v2 before forwarding data.
+        if let Ok(v) = std::env::var("ZRPC_GREET_V2") {
+            if v == "1" || v == "0" {
+                let gt: u32 = v.parse().unwrap();
+                let mut g = Vec::new();
+                put_str(&mut g, 1, "GET /key/pub HTTP/1.1\r\nHost: nas\r\n\r\n");
+                put_uint32(&mut g, 2, gt);
+                eprintln!("[libzrpc-native] sending greet_v2 type={gt}");
+                t.write_message(&g).unwrap();
+            }
+        }
+        if std::env::var("ZRPC_GREET_PUB").ok().as_deref() == Some("1") {
+            let mut g = Vec::new();
+            put_str(&mut g, 1, "GET /key/pub HTTP/1.1\r\nHost: nas\r\n\r\n");
+            put_bool(&mut g, 2, false);
+            put_str(&mut g, 3, &params.nas_id);
+            put_bool(&mut g, 4, false);
+            eprintln!("[libzrpc-native] sending public_connect_greet_request_v2");
+            t.write_message(&g).unwrap();
+        }
         t.write_raw(b"GET /key/pub?webagent=v2&rnd=probe HTTP/1.1\r\nHost: nas\r\nConnection: close\r\n\r\n")
             .unwrap();
         let mut got = Vec::new();

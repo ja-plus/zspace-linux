@@ -144,13 +144,18 @@ real_payload() {
         install -m 0644 "$so" "$FILES_DIR/app/sdk/libzrpc.so"
     fi
 
-    # 幂等补丁：linux dll 分支 + 删 win32 .node + 装 sdk/libzrpc.so
+    # 原生播放器（替代 uzplayer/UZPlayer.exe）；缺了就按需构建
+    local player="$ROOT/native/player/target/release/zspace-player"
+    if [ ! -f "$player" ] && command -v cargo >/dev/null 2>&1; then
+        echo "== 构建 zspace-player =="
+        (cd "$ROOT/native/player" && cargo build --release) || die "播放器构建失败"
+    fi
+    [ -f "$player" ] || die "缺少播放器二进制：$player"
+
+    # 幂等补丁：linux dll 分支 + 6 处播放器补丁 + sdk/libzrpc.so + uzplayer
     if [ -f "$ROOT/native/patches/patch_app.py" ] && command -v python3 >/dev/null 2>&1; then
-        if [ -f "$so" ]; then
-            python3 "$ROOT/native/patches/patch_app.py" "$FILES_DIR/app" "$so"
-        else
-            python3 "$ROOT/native/patches/patch_app.py" "$FILES_DIR/app"
-        fi
+        ZS_NODE="$FILES_DIR/electron/electron" \
+            python3 "$ROOT/native/patches/patch_app.py" "$FILES_DIR/app" "${so:-}" "$player"
     fi
 
     # 包内软链接：Electron 用 resourcesPath/app 解析应用名。
@@ -258,6 +263,8 @@ if [ -n "$PAYLOAD_DIR" ]; then
     expect A14 "libzrpc.so 是 ELF" is_elf "$FILES_DIR/app/sdk/libzrpc.so"
     expect A15 "app.asar 已解包（background.js 在位）" test -s "$FILES_DIR/app/background.js"
     expect A16 "linux dll 分支已打" grep -q 'linux"==process.platform' "$FILES_DIR/app/background.js"
+    expect A17 "zspace-player 随包（uzplayer/）" test -x "$FILES_DIR/app/uzplayer/zspace-player"
+    expect A18 "6 处播放器补丁已打" bash -c "[ \"\$(grep -oF 'pkill -x zspace-player' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
 fi
 
 # B. 脚本与 control
