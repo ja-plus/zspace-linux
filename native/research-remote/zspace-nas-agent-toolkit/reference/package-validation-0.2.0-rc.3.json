@@ -1,0 +1,66 @@
+{
+  "version": "0.2.0-rc.3",
+  "date": "2026-10-19 Asia/Shanghai",
+  "unit_tests": 192,
+  "cli_contract_tests": 2,
+  "clippy": "passed",
+  "fmt": "passed",
+  "platforms": {
+    "darwin-arm64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "native ARM64 macOS",
+      "cross_build": "passed"
+    },
+    "darwin-x64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "Rosetta x64 on ARM64 macOS",
+      "cross_build": "passed"
+    },
+    "linux-arm64": {
+      "cross_build": "passed",
+      "native_smoke": "pending",
+      "reason": "No native rc.3 device acceptance exercised"
+    },
+    "linux-x64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "authorized NAS x86_64, isolated home, no credentials copied",
+      "cross_build": "passed"
+    },
+    "windows-arm64": {
+      "cross_build": "passed",
+      "native_smoke": "pending",
+      "reason": "No native rc.3 device acceptance exercised"
+    },
+    "windows-x64": {
+      "cross_build": "passed",
+      "native_smoke": "pending",
+      "reason": "No native rc.3 device acceptance exercised"
+    }
+  },
+  "business_acceptance": "reference/acceptance-report-fixes-2026-10-19.json; 33 same-source repair checks, fixtures cleaned",
+  "scope": "Repair rc.2 acceptance findings; not a claim all security backlog or business functions complete",
+  "external_rc2_windows_report": "User reported rc.2 running on Windows x64; does not replace rc.3 native acceptance",
+  "macos_strip": "rust-objcopy warning handled by final /usr/bin/strip",
+  "binary_format_version_and_hashes": "verified by release-manifest.py"
+}

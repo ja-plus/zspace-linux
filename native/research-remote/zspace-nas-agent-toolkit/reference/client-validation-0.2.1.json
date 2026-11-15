@@ -1,0 +1,554 @@
+{
+  "version": "0.2.1",
+  "scope": "client only; local release; server unchanged",
+  "unit_tests": 217,
+  "cli_contract_tests": 3,
+  "fmt": "passed",
+  "native_clippy": "passed",
+  "windows_cross_clippy": {
+    "x64": "passed",
+    "arm64": "passed"
+  },
+  "native_security_process_checks": {
+    "macos_arm64": {
+      "passed": 17,
+      "checks": [
+        "isolated status",
+        "forced LAN fails closed",
+        "unsafe host rejected",
+        "empty restore refused",
+        "unknown field refused",
+        "encoded path refused",
+        "duplicate JSON refused",
+        "placeholder refused",
+        "private download refused",
+        "public download requires transient consent",
+        "resume requires transient consent",
+        "persisted consent cannot enable download",
+        "HTTP requires explicit downgrade",
+        "raw query rejected",
+        "nested placeholder rejected",
+        "file-only logout",
+        "logout persists"
+      ],
+      "real_credentials_used": false
+    },
+    "macos_x64_rosetta": {
+      "passed": 17,
+      "checks": [
+        "isolated status",
+        "forced LAN fails closed",
+        "unsafe host rejected",
+        "empty restore refused",
+        "unknown field refused",
+        "encoded path refused",
+        "duplicate JSON refused",
+        "placeholder refused",
+        "private download refused",
+        "public download requires transient consent",
+        "resume requires transient consent",
+        "persisted consent cannot enable download",
+        "HTTP requires explicit downgrade",
+        "raw query rejected",
+        "nested placeholder rejected",
+        "file-only logout",
+        "logout persists"
+      ],
+      "real_credentials_used": false
+    },
+    "linux_x64": {
+      "passed": 17,
+      "checks": [
+        "isolated status",
+        "forced LAN fails closed",
+        "unsafe host rejected",
+        "empty restore refused",
+        "unknown field refused",
+        "encoded path refused",
+        "duplicate JSON refused",
+        "placeholder refused",
+        "private download refused",
+        "public download requires transient consent",
+        "resume requires transient consent",
+        "persisted consent cannot enable download",
+        "HTTP requires explicit downgrade",
+        "raw query rejected",
+        "nested placeholder rejected",
+        "file-only logout",
+        "logout persists"
+      ],
+      "real_credentials_used": false,
+      "platform": "Linux x86_64 NAS native",
+      "real_business_API_used": false,
+      "remote_temporary_removed": true
+    }
+  },
+  "unknown_action_process_checks": {
+    "version": "0.2.1",
+    "tools": 54,
+    "passed": 108,
+    "checks": [
+      {
+        "tool": "ai_models",
+        "yes": false
+      },
+      {
+        "tool": "ai_models",
+        "yes": true
+      },
+      {
+        "tool": "album_management",
+        "yes": false
+      },
+      {
+        "tool": "album_management",
+        "yes": true
+      },
+      {
+        "tool": "app_manage",
+        "yes": false
+      },
+      {
+        "tool": "app_manage",
+        "yes": true
+      },
+      {
+        "tool": "audiobooks_management",
+        "yes": false
+      },
+      {
+        "tool": "audiobooks_management",
+        "yes": true
+      },
+      {
+        "tool": "backup_center",
+        "yes": false
+      },
+      {
+        "tool": "backup_center",
+        "yes": true
+      },
+      {
+        "tool": "backup_cloud",
+        "yes": false
+      },
+      {
+        "tool": "backup_cloud",
+        "yes": true
+      },
+      {
+        "tool": "backup_sync",
+        "yes": false
+      },
+      {
+        "tool": "backup_sync",
+        "yes": true
+      },
+      {
+        "tool": "browser_management",
+        "yes": false
+      },
+      {
+        "tool": "browser_management",
+        "yes": true
+      },
+      {
+        "tool": "comics_management",
+        "yes": false
+      },
+      {
+        "tool": "comics_management",
+        "yes": true
+      },
+      {
+        "tool": "docker_compose",
+        "yes": false
+      },
+      {
+        "tool": "docker_compose",
+        "yes": true
+      },
+      {
+        "tool": "docker_containers",
+        "yes": false
+      },
+      {
+        "tool": "docker_containers",
+        "yes": true
+      },
+      {
+        "tool": "docker_images",
+        "yes": false
+      },
+      {
+        "tool": "docker_images",
+        "yes": true
+      },
+      {
+        "tool": "docker_networks",
+        "yes": false
+      },
+      {
+        "tool": "docker_networks",
+        "yes": true
+      },
+      {
+        "tool": "docker_system",
+        "yes": false
+      },
+      {
+        "tool": "docker_system",
+        "yes": true
+      },
+      {
+        "tool": "download_control",
+        "yes": false
+      },
+      {
+        "tool": "download_control",
+        "yes": true
+      },
+      {
+        "tool": "download_manage",
+        "yes": false
+      },
+      {
+        "tool": "download_manage",
+        "yes": true
+      },
+      {
+        "tool": "download_settings",
+        "yes": false
+      },
+      {
+        "tool": "download_settings",
+        "yes": true
+      },
+      {
+        "tool": "download_torrent",
+        "yes": false
+      },
+      {
+        "tool": "download_torrent",
+        "yes": true
+      },
+      {
+        "tool": "file_archive",
+        "yes": false
+      },
+      {
+        "tool": "file_archive",
+        "yes": true
+      },
+      {
+        "tool": "file_collect",
+        "yes": false
+      },
+      {
+        "tool": "file_collect",
+        "yes": true
+      },
+      {
+        "tool": "file_devices",
+        "yes": false
+      },
+      {
+        "tool": "file_devices",
+        "yes": true
+      },
+      {
+        "tool": "file_duplicates",
+        "yes": false
+      },
+      {
+        "tool": "file_duplicates",
+        "yes": true
+      },
+      {
+        "tool": "file_encrypt",
+        "yes": false
+      },
+      {
+        "tool": "file_encrypt",
+        "yes": true
+      },
+      {
+        "tool": "file_history",
+        "yes": false
+      },
+      {
+        "tool": "file_history",
+        "yes": true
+      },
+      {
+        "tool": "file_labels",
+        "yes": false
+      },
+      {
+        "tool": "file_labels",
+        "yes": true
+      },
+      {
+        "tool": "file_metadata",
+        "yes": false
+      },
+      {
+        "tool": "file_metadata",
+        "yes": true
+      },
+      {
+        "tool": "file_notes",
+        "yes": false
+      },
+      {
+        "tool": "file_notes",
+        "yes": true
+      },
+      {
+        "tool": "file_public",
+        "yes": false
+      },
+      {
+        "tool": "file_public",
+        "yes": true
+      },
+      {
+        "tool": "file_safe",
+        "yes": false
+      },
+      {
+        "tool": "file_safe",
+        "yes": true
+      },
+      {
+        "tool": "file_snapshots",
+        "yes": false
+      },
+      {
+        "tool": "file_snapshots",
+        "yes": true
+      },
+      {
+        "tool": "file_tasks",
+        "yes": false
+      },
+      {
+        "tool": "file_tasks",
+        "yes": true
+      },
+      {
+        "tool": "file_user_share",
+        "yes": false
+      },
+      {
+        "tool": "file_user_share",
+        "yes": true
+      },
+      {
+        "tool": "firewall_management",
+        "yes": false
+      },
+      {
+        "tool": "firewall_management",
+        "yes": true
+      },
+      {
+        "tool": "gpu_management",
+        "yes": false
+      },
+      {
+        "tool": "gpu_management",
+        "yes": true
+      },
+      {
+        "tool": "iscsi_management",
+        "yes": false
+      },
+      {
+        "tool": "iscsi_management",
+        "yes": true
+      },
+      {
+        "tool": "media_convert",
+        "yes": false
+      },
+      {
+        "tool": "media_convert",
+        "yes": true
+      },
+      {
+        "tool": "music_management",
+        "yes": false
+      },
+      {
+        "tool": "music_management",
+        "yes": true
+      },
+      {
+        "tool": "reader_management",
+        "yes": false
+      },
+      {
+        "tool": "reader_management",
+        "yes": true
+      },
+      {
+        "tool": "recyclebin",
+        "yes": false
+      },
+      {
+        "tool": "recyclebin",
+        "yes": true
+      },
+      {
+        "tool": "search_management",
+        "yes": false
+      },
+      {
+        "tool": "search_management",
+        "yes": true
+      },
+      {
+        "tool": "search_rag",
+        "yes": false
+      },
+      {
+        "tool": "search_rag",
+        "yes": true
+      },
+      {
+        "tool": "share",
+        "yes": false
+      },
+      {
+        "tool": "share",
+        "yes": true
+      },
+      {
+        "tool": "storage_maintenance",
+        "yes": false
+      },
+      {
+        "tool": "storage_maintenance",
+        "yes": true
+      },
+      {
+        "tool": "storage_usb_mode",
+        "yes": false
+      },
+      {
+        "tool": "storage_usb_mode",
+        "yes": true
+      },
+      {
+        "tool": "system_certificates",
+        "yes": false
+      },
+      {
+        "tool": "system_certificates",
+        "yes": true
+      },
+      {
+        "tool": "system_ddns",
+        "yes": false
+      },
+      {
+        "tool": "system_ddns",
+        "yes": true
+      },
+      {
+        "tool": "system_events",
+        "yes": false
+      },
+      {
+        "tool": "system_events",
+        "yes": true
+      },
+      {
+        "tool": "system_network",
+        "yes": false
+      },
+      {
+        "tool": "system_network",
+        "yes": true
+      },
+      {
+        "tool": "system_settings",
+        "yes": false
+      },
+      {
+        "tool": "system_settings",
+        "yes": true
+      },
+      {
+        "tool": "system_users",
+        "yes": false
+      },
+      {
+        "tool": "system_users",
+        "yes": true
+      },
+      {
+        "tool": "time_machine",
+        "yes": false
+      },
+      {
+        "tool": "time_machine",
+        "yes": true
+      },
+      {
+        "tool": "video_libraries",
+        "yes": false
+      },
+      {
+        "tool": "video_libraries",
+        "yes": true
+      },
+      {
+        "tool": "virus_management",
+        "yes": false
+      },
+      {
+        "tool": "virus_management",
+        "yes": true
+      },
+      {
+        "tool": "vm_management",
+        "yes": false
+      },
+      {
+        "tool": "vm_management",
+        "yes": true
+      }
+    ],
+    "real_credentials_used": false
+  },
+  "binaries_built": [
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-arm64",
+    "linux-x64",
+    "windows-arm64",
+    "windows-x64"
+  ],
+  "platform_support": {
+    "darwin-arm64": "supported",
+    "linux-x64": "supported",
+    "darwin-x64": "test only; Rosetta checked; Intel native pending",
+    "linux-arm64": "native acceptance pending",
+    "windows-arm64": "native permission/runtime acceptance pending",
+    "windows-x64": "0.2.0 functional smoke externally reported; final 0.2.1 native permission/runtime acceptance pending"
+  },
+  "business_protocol_validation": "mock servers; final patch did not rerun the external 403/660-case NAS business acceptance suite",
+  "known_unfixed": {
+    "V3": "NAS Compose handler FilePath directory mismatch and env/.env read/write mismatch; client reports explicit failure; server unchanged"
+  },
+  "non_defect_findings": {
+    "V7": "time_sync and lyrics_global mutate settings; --yes retained",
+    "V5": "details backend is parameterless; docs clarified"
+  },
+  "dependency_audit": "dependency-audit-0.2.1.json; dependency tuples unchanged; RSA advisory retained with scope assessment",
+  "remediation": "acceptance-remediation-0.2.1.md",
+  "authorization_input": "existing current-session hidden prompt retained",
+  "signing": "unsigned; SHA256 checks integrity only"
+}

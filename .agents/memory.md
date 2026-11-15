@@ -581,3 +581,161 @@
   ⑥ 物料与复现（脚本/物料位置、复现命令、关键事实速查）。
 - 影响：后续会话做原生/逆向工作时按 AGENTS.md 索引读此文档。改动文件：
   .agents/research-lessons.md（新增）、AGENTS.md（+1 行索引）、memory.md。
+
+## 2026-11-12 Phase 1 启动：M0+M1 完成（native/libzrpc Rust 工程）
+
+- 背景：用户批准进 Phase 1。计划锚点 ~/.qoder-cn/plans/windy-coast-asp.md，
+  里程碑 M0~M5（任务#14~19）。工具链就绪：Rust 1.98.1/Node 24.22.3/gcc。
+- M0 加密复现（native/libzrpc/src/crypto.rs）：自实现 MT19937(init_genrand)，
+  sha2/aes-gcm crate（AES-256-GCM 用 U16 nonce 匹配 Node 16B IV）。
+  **cargo test 4/4 过**：MT19937 对齐标准向量 seed5489=[3499211612,...]；
+  派生密钥确定 = **key(ascii) 3891346e92151849d58e70de02a05c59 /
+  iv 3891346e92151849**（MT19937(4728423)×64→SHA256 hex→[0:32]/[0:16]）。
+- M1 FFI 壳（src/ffi.rs）：20 个 #[no_mangle] extern "C" 导出（JS 注册 18 +
+  get_ipv6_priority/set_sdk_location），OnceLock<Mutex<State>> 状态，
+  线程局部 CString 保活字符串返回，调用日志写 init 配置的 filepath。
+  **Node 加载测试过**（native/test/ffi-load.js）：用官方 asar 自带的
+  @lwahonen/ffi-napi linux prebuild 加载，18+2 导出全通，类型映射全对。
+- 关键坑：① npm 装 @lwahonen/ffi-napi 走 node-gyp 源码编译失败 → 改用
+  官方 asar 解出的 node_modules（含 linux prebuild）+ NODE_PATH。
+  ② node-gyp-build 优先选 build/Release 的 **win32** binding.node（invalid
+  ELF）→ **删掉 win32 build/Release/*.node** 回退 prebuilds/linux-x64 即好。
+  ③ asar 全量解包需先解出 app.asar.unpacked（否则 extract 报 ENOENT）。
+- 物料：native/work/app/extracted/node_modules（应用依赖+prebuild，删了win32）；
+  native/libzrpc/target/release/libzrpc.so（416KB，20 导出）。
+- 影响：M0/M1 完成。下一步 M2（发现 UDP5577 + 13579 代理）；真实 NAS 验证
+  仍待批准（任务#12 可选）。start_service 入参是 **base64**(AES-GCM)，
+  发现是 **hex**(AES-GCM)——两种编码不同，M2 注意。
+
+## 2026-11-12 M2 完成：发现 + 代理，完整 LAN 链路离线验证通过
+
+- native/libzrpc/src/discovery.rs：make_request=hex(AES-GCM({"key":"tdxnassearch"}))，
+  parse_response 解 {nas_id/id,ip,hostname,port}，discover() UDP 广播 5577 +
+  设备缓存 remember/lookup_ip（nas_id 含 . 视为 IP 直返）。
+- native/libzrpc/src/proxy.rs：阻塞式 HTTP/1.1 反向代理（reqwest blocking +
+  rustls，danger_accept_invalid_certs），线程/连接，normalize_path 自动加
+  webagent=v2 + rnd=<ms>_<rand>，跳过 hop-by-hop 头，全 body 缓冲
+  （流式/WebSocket 留 M5）。start/stop/stop_all 按 local_port 管理。
+- ffi start_service：base64 解码→AES-GCM 解密→{local_port,remote_port,nas_id,
+  scheme?}→lookup_ip→proxy::start（scheme 默认 https，可配 http 兼容网页版）。
+- **cargo test 9/9 过**（含 proxy_forwards_to_mock）；**Node 端到端过**
+  （native/test/ffi-proxy.js）：Node 同款 AES-GCM 加密配置→start_service code0
+  →代理转发 mock 上游→响应带 webagent=v2+rnd。完整 LAN 链路离线自洽。
+- 依赖：sha2/aes-gcm/hex/base64/serde/serde_json/reqwest(blocking,rustls-tls)。
+- 影响：M0/M1/M2 完成，Rust libzrpc.so 核心（加密+FFI+发现+代理）就绪。
+  **真实 NAS 互通仍未验**（发现帧格式/响应字段/代理鉴权头需抓包确认，任务#12）。
+  下一步 M3：Linux Electron 33.3.1 下载 + asar linux 分支补丁 + 组装启动。
+  native/work/app/extracted 留有完整 asar+node_modules（M3 补丁用）。
+
+## 2026-11-12 真实 NAS 验证受阻：NAS 是远程的（不在局域网）
+
+- 背景：用户批准验真实 NAS。被动监听 UDP5577 + 主动发现广播均 0 回应。
+- 排查：应用缓存里 NAS 旧 IP 与本机当前网段不同；ping 旧 IP 100% 丢包；
+  扫当前网段 5055 无 NAS。**用户确认 NAS 不在局域网（远程）**。
+- 结论：LAN 发现/代理的真实验证暂缓（任务#12 挂起）；加密+代理已离线 mock
+  验证。**原生版主路径其实是远程**（zconnect HTTPS 云代理 + OAuth2，官方
+  Skill 已证明），LAN 发现只是同网段便利路径。
+- 设计影响：广播发现仅同网段有效，跨网段靠缓存 IP/云端——发现逻辑要兼顾。
+  登录页是账号登录/IP直连/离线登录，**无「搜索设备」按钮**（之前假设错）。
+- 安全：未向 NAS 写入任何东西；主动探测仅标准发现广播（无状态变更）。
+  不记录具体内网 IP（敏感）。拉起的官方 Wine 客户端仍在运行。
+- 影响：转 M3（组装+启动到登录页，离线可行，登录页不需 NAS）。
+
+## 2026-11-12 M3 完成：原生版启动并渲染登录页（Deepin 25，无 Wine）
+
+- 组装：Linux Electron 33.3.1（npmmirror 下 106MB）+ 解包官方 app
+  （native/work/app/extracted）+ 补丁 + 自制 libzrpc.so + sqlite3 linux prebuild
+  （napi-v6-linux-glibc-x64，npmmirror）。补丁脚本 native/patches/patch_app.py：
+  ① background.js dll 加载加 linux→libzrpc.so 分支；② 删 win32 build/Release
+  binding（M1 已删）；③ 装 sdk/libzrpc.so。启动器 native/run-native.sh。
+- **关键坑（渲染器空白根因）**：登录页 loaded 但 Vue 不挂载、窗口空白。
+  CDP 查得 `path.join(null)`，逐模块定位到 **env-paths 的 readPackageJson
+  (webpack 模块 f236) 返回 {name:null}** → appName=null → path.join(null)。
+  原因：readPackageJson 按 process.resourcesPath/app.asar、/app、cwd 找
+  package.json；Wine 里 app 在 resources/app.asar 找得到，**解包目录直跑时
+  这些路径都没有 app**。修复：**把 app 软链到 electron/dist/resources/app**
+  （run-native.sh 已固化 ln -sfn）。修复后 Vue 挂载、登录页完整渲染、中文清晰。
+- 调试手法（可复用）：CDP（--remote-debugging-port=9222）+ websockets 库；
+  webpack4 用 `webpackJsonp.push([["c"],{"m":fn(m,e,r){window.__wr=r}},[["m"]]])`
+  捕获 __webpack_require__，直接调内部模块（os=8e57/env-paths=5273/
+  readPkg=f236）逐个隔离 null。脚本 native/test/cdp_inspect.py。
+- 验证：CDP DOM appLen=11837/inputs=4/buttons=12，中文「账号登录/IP直连/
+  离线登录…」；截图与 Wine 版一致。"load dll success"（我们的 .so 经 ffi-napi
+  加载无错）。注意：空白是 JS 错误非 GPU 问题，--disable-gpu 或非必需（待验）。
+- 影响：M0~M3 完成。原生版可启动到登录页。下一步 M4（登录+浏览，NAS 远程
+  需走 zconnect 云代理路径）/M5（播放+deb）。播放器 exe 报错预期内（M5）。
+  官方 Wine 客户端与原生版可同时运行（userData 不同）。
+
+## 2026-11-12 M4 解密 bug 修复：app 的 encodeService 不附加 GCM auth tag
+
+- 背景：用户原生版登录报「无法连接到设备」。日志查得 shim 返回 decrypt failed。
+- 排查：CDP+webpack 注入确认渲染器 readPackageJson 正常后，定位 start_service
+  解密失败。用 app 的 J 类（标准 MT19937 init_genrand，genrand_int32 返回
+  **无符号** >>>0）在 Node 派生密钥，**与 Rust 密钥完全一致**
+  （3891346e92151849d58e70de02a05c59）。逐字节复刻 encodeService 发现：
+  **app 只 concat([update,final]).toString('base64')，不 append getAuthTag()**！
+  我们的 aes-gcm decrypt 需要 ct||tag → 无 tag 必失败。
+- 修复：crypto.rs 加 `decrypt_gcm_no_tag`（无 tag GCM = AES-CTR + GCM 计数器：
+  16B IV 时 J0=GHASH_H(IV||0^64||[128]_64)，数据计数器 inc32(J0)；用
+  aes/ctr/ghash crate）。start_service 改无 tag 解密 + with-tag 回退。
+  **cargo test 10/10 过**（含 gcm_no_tag_roundtrip）；Node app 精确编码验证
+  no-tag/with-tag 均解密成功。
+- 调试手法：ffi-appencode.js 用 app 的 J 派生 de/he 复刻 encodeService 喂 shim，
+  对比 no-tag/with-tag 隔离 bug。eval 提取官方包 J 类（本地可信文件，RE 测试用）。
+- **M4 真正难点浮现**：解密修好后返回 "nas ip unknown"——**NAS 是远程的**，
+  app 传 nas_id 但 ip=''，shim 的 LAN 代理查不到 IP。远程 NAS 官方靠 libzrpc
+  的 P2P/中继隧道（我们暂缓的硬骨头）。远程承接三选：① Tailscale/WireGuard
+  把远程 NAS 变虚拟局域网（shim LAN 代理即可用，最实际）② 实现 zconnect
+  HTTPS 云代理路径（Skill CLI 证明可行，需研究云代理 API+OAuth）③ 完整 P2P 逆向。
+- 影响：M0~M3 完成 + M4 解密修复。远程连接待用户选路径。shim 有临时调试转储
+  /tmp/zrpc-input.b64（M4 调试用，后续可删）。
+
+## 2026-11-13 远程通道定案：zconnect HTTP CONNECT 云代理（用户否决 Tailscale）
+
+- 背景：用户明确「NAS 不能装东西，不能要求用户安装，要和官方客户端一样透明
+  连远程」。Tailscale 排除。唯一可行=复刻官方远程通道。
+- 取证（官方 Skill CLI linux-x64，update.zenithspace.net/AgentToolkit 真实直链
+  + 包内 reference/connection.md、authentication.md）：
+  - **cloud 模式 = 把 https://oauth.zconnect.cn 当 HTTP CONNECT 代理**
+    （hyper-util proxy/tunnel.rs + matcher.rs），带路由头 **nas-id / remote-port
+    (=5055) / request-purpose** + **Proxy-Authorization: Bearer <token>**，
+    CONNECT 隧道穿透到远程 NAS。标准 TLS 链+主机名校验，禁重定向。
+  - OAuth：client_id=**ZspCli**；oauth.zconnect.cn/wbui/authorize（浏览器授权）
+    → /auth/oauth2/code/status?state&client_id 轮询 → /auth/oauth2/code/token
+    （表单 client_id/auth_code/state）换 token；access_token 临期 60s 刷新
+    （www.zconnect.cn/auth/oauth2/retoken）；/account/oauth2/userinfo 验证。
+  - NAS API 端点与桌面渲染器一致（/v2/file/、/system/recent、/zvideo/…）。
+  - 桌面 background.js 也用 OIDC（access_token/id_token/refresh_token），
+    webBase=https://www.zconnect.cn，含 cloudPubKey/nasPubKey（P2P 加密用）。
+- 实现方向：shim 的 reqwest 代理改为经 oauth.zconnect.cn CONNECT 隧道，
+  注入 nas-id/remote-port/Proxy-Authorization 头。**关键待解=token 来源**：
+  ① 复用桌面 app 登录 token（最透明，需验证与云代理兼容）② 复刻 Skill 的
+  ZspCli OAuth（一次性浏览器授权，保证兼容）。
+- URL 纪律（用户多次强调）：只用真实官方地址，严禁 routify 等临时代理替换；
+  zconnect 端点是任务目标机制本身非替代；每次调用核对来源。
+- 影响：M4-remote（任务#20）进行中。物料 native/research-remote/（Skill CLI
+  二进制+文档）。下一步验证桌面 token 能否用于云代理（需用户登录原生版）。
+
+## 2026-11-13 中继信令尖峰成功：远程可用原版登录 token（无需浏览器）
+
+- 背景：用户否决浏览器 OAuth（「登录逻辑要与原版统一」）。转研究 libzrpc
+  强制中继信令（mac 完整符号）。任务#21 完成。
+- **决定性发现**：桌面 background.js `c.ztoken = a.a.state.user.token`——
+  中继鉴权 ztoken **就是用户正常账号密码登录的 user.token**。远程无需浏览器、
+  无需额外授权，登录体验与原版完全一致。shim 复用同一 token。
+- 协议（详见 native/research-remote/RELAY-PROTOCOL.md）：
+  配置 zrpl-ucloud.zenithspace.net/platform/config/zrp/zrpc/v16；
+  调度 dispatch-{bsnew,cs,yz}.zenithspace.net:3388 / dispatch.ud.link:3388；
+  流程 guide(zrpc_connect_guide{nas_id}→zrpc_guide_response{real_addr,
+  useful_addr}) → connect(zrpc_connect_request{nas_id,ztoken=user.token,
+  zrpc_addr,request_uuid}) → 自定义 TLS 握手(msg.tls: client_hello/client_rand
+  → server_hello/server_pub_key → client_key_exchange/pre_master_secret
+  → server_finish) → greet(zrpl_greet_request_v2{http_header}) → 按 nas_id
+  转发 HTTP。protobuf 消息 msg.tp.* / msg.tls.*，schema 内嵌 dylib 可提取。
+- 可行性：**远程可行，登录与原版统一**。主要工作量=自定义 TLS 握手公钥密码层
+  （对应桌面 cloudPubKey/nasPubKey）+ dispatch 信令 + 隧道转发接进 shim 代理。
+  P2P 模式(p2p_connect_request)比中继复杂，先做强制中继。
+- 安全/纪律：不从磁盘采集凭据（分类器正确拦截过 Cookies/JWT 扫描）；token 经
+  app 正常登录合法取得。URL 只用真实官方来源，无 routify 替换。
+- 影响：远程路径定案=复刻 libzrpc 强制中继（非云代理 OAuth）。下一步提取完整
+  proto schema + 反汇编握手密码学评估难度，再实现。

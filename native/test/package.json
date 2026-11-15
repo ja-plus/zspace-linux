@@ -1,0 +1,10 @@
+{
+  "name": "zrpc-ffi-test",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Load-test the native libzrpc.so via the same ffi-napi fork the app uses",
+  "dependencies": {
+    "@lwahonen/ffi-napi": "^4.0.12",
+    "@lwahonen/ref-napi": "^4.0.8"
+  }
+}

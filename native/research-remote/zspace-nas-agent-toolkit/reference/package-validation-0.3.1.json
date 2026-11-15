@@ -1,0 +1,15 @@
+{
+  "version": "0.3.1",
+  "variants": {
+    "thin": {"bundled_binaries": false, "maximum_bytes": 2621440, "status": "passed locally; CDN publication pending"},
+    "offline": {"bundled_binaries": true, "required_platform_binaries": 6, "maximum_bytes": 52428800, "status": "passed"}
+  },
+  "checks": [
+    "single top-level directory and one SKILL.md",
+    "packaged source hashes match release-manifest.json",
+    "no profile, token, credential, cache, or temporary download files",
+    "runtime artifact manifest matches fixed CDN URLs, byte counts, and SHA-256",
+    "thin loader fixture and native wrapper smoke"
+  ],
+  "exact_archive_hashes": "See dist/package-validation-0.3.1-thin.json and dist/package-validation-0.3.1-offline.json; archive hashes cannot be embedded recursively inside the same archive."
+}

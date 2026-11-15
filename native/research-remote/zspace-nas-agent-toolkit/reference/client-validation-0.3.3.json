@@ -1,0 +1,17 @@
+{
+  "version": "0.3.3",
+  "validation_date": "2026-10-22",
+  "scope": "four-device legacy report remediation; client, docs and packaging only",
+  "fmt": "passed",
+  "unit_tests": "passed: 238",
+  "cli_contract_tests": "passed: 8",
+  "native_clippy": "passed with -D warnings",
+  "six_platform_build": "passed: six release binaries produced; cross-build is not native acceptance",
+  "cdn_publication": "passed: six immutable versioned artifacts uploaded and HTTPS read-back verified by bytes and SHA-256",
+  "cdn_runtime_smoke": "passed on native macOS arm64: clean-cache download, hash verification, execution and cache reuse",
+  "package_validation": "passed for thin and offline variants; final hashes recorded in dist validation records",
+  "server_changed": false,
+  "real_credentials_used": false,
+  "native_business_retest": "pending on Q4-9Y70, Z4Pro+-9JYG, Z4Pro-OKNG and Z425-BCRV",
+  "other_native_boundaries": "Windows, Intel Mac, Linux ARM64 and WorkBuddy macOS sandbox remain pending"
+}

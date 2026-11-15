@@ -1,0 +1,8 @@
+{
+  "version": "0.3.2",
+  "variants": {
+    "thin": {"bundled_binaries": false, "maximum_bytes": 2621440, "status": "passed"},
+    "offline": {"bundled_binaries": true, "required_platform_binaries": 6, "maximum_bytes": 52428800, "status": "passed"}
+  },
+  "exact_archive_hashes": "See dist/package-validation-0.3.2-thin.json and dist/package-validation-0.3.2-offline.json."
+}

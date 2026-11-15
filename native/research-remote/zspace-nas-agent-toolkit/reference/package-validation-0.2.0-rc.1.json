@@ -1,0 +1,73 @@
+{
+  "version": "0.2.0-rc.1",
+  "date": "2026-10-16 Asia/Shanghai",
+  "unit_tests": 159,
+  "cli_contract_tests": 2,
+  "clippy": "passed",
+  "fmt": "passed",
+  "platforms": {
+    "darwin-arm64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "native ARM64"
+    },
+    "darwin-x64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "Rosetta x64 on ARM64 macOS"
+    },
+    "linux-x64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "authorized NAS x86_64; no credentials copied"
+    },
+    "linux-arm64": {
+      "native_smoke": "pending",
+      "reason": "cross-built; native acceptance device not exercised"
+    },
+    "windows-x64": {
+      "native_smoke": "pending",
+      "reason": "cross-built; native acceptance device not exercised"
+    },
+    "windows-arm64": {
+      "native_smoke": "pending",
+      "reason": "cross-built; native acceptance device not exercised"
+    }
+  },
+  "authenticated_release_read_checks": [
+    {
+      "test": "system_info",
+      "ok": true,
+      "error_code": null
+    },
+    {
+      "test": "file_space",
+      "ok": true,
+      "error_code": null
+    },
+    {
+      "test": "ai_final_state",
+      "ok": true,
+      "error_code": null
+    }
+  ],
+  "development_profile_logout_verified": true
+}

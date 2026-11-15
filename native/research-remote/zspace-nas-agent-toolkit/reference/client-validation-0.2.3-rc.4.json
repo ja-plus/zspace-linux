@@ -1,0 +1,40 @@
+{
+  "version": "0.2.3-rc.4",
+  "channel": "candidate",
+  "scope": "client only; rc.3 login mechanism remediation; no NAS or OAuth server changes",
+  "validation_date": "2026-10-21",
+  "timezone": "Asia/Shanghai",
+  "fmt": "passed",
+  "unit_tests": {
+    "passed": 233,
+    "failed": 0
+  },
+  "cli_contract_tests": {
+    "passed": 7,
+    "failed": 0,
+    "new_login_checks": [
+      "stdin authorization-code consumption and structured stdout URL event",
+      "headless hidden-input rejection before URL emission",
+      "same-profile concurrent login rejection"
+    ]
+  },
+  "native_clippy": "passed with -D warnings",
+  "login_remediation": {
+    "L1": "fixed with --auth-code-stdin",
+    "L2": "fixed with one-line oauth_authorization JSON on stdout",
+    "L3": "fixed with 180-second process-level receive timeout",
+    "L4": "fixed with preflight E_OAUTH guidance before URL emission",
+    "L5": "fixed by holding the profile lock for the complete login transaction",
+    "L6": "documented intentional no local authorization-code digest persistence",
+    "L7": "server protocol dependency; PKCE not claimed"
+  },
+  "real_credentials_used": false,
+  "real_nas_business_api_used": false,
+  "server_changed": false,
+  "native_acceptance": {
+    "windows_login": "pending test-team replay of the rc.3 report scenarios",
+    "windows_write_security": "pending scripts/windows-write-selftest.py",
+    "linux_arm64": "pending",
+    "intel_macos": "pending"
+  }
+}

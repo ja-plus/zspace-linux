@@ -1,0 +1,150 @@
+{
+  "version": "0.2.0-rc.3",
+  "date": "2026-10-19 Asia/Shanghai",
+  "unit_tests": 192,
+  "cli_contract_tests": 2,
+  "live_checks": 33,
+  "groups": {
+    "report-fix": [
+      {
+        "test": "write_default_creates_exact_target",
+        "ok": true
+      },
+      {
+        "test": "write_default_conflict_fails_without_rename",
+        "ok": true
+      },
+      {
+        "test": "write_skip_preserves_content",
+        "ok": true
+      },
+      {
+        "test": "write_rename_reports_actual_path",
+        "ok": true
+      },
+      {
+        "test": "write_overwrite_replaces_exact_target",
+        "ok": true
+      },
+      {
+        "test": "slow_start_canonical_id",
+        "ok": true
+      },
+      {
+        "test": "slow_result_alias_and_string_id",
+        "ok": true
+      },
+      {
+        "test": "vm_iscsi_unknown_parameters_rejected",
+        "ok": true
+      },
+      {
+        "test": "documented_metadata_example_creates_album",
+        "ok": true
+      },
+      {
+        "test": "private_image_urls_rejected_without_nas_fetch",
+        "ok": true
+      },
+      {
+        "test": "private_live_urls_rejected",
+        "ok": true
+      },
+      {
+        "test": "eight_byte_fake_png_rejected",
+        "ok": true
+      },
+      {
+        "test": "share_create_stdout_redacted_with_id_preserved",
+        "ok": true
+      },
+      {
+        "test": "share_list_stdout_redacted",
+        "ok": true
+      },
+      {
+        "test": "explicit_show_secret_reveals_share_only",
+        "ok": true
+      },
+      {
+        "test": "owned_share_deleted",
+        "ok": true
+      },
+      {
+        "test": "owned_album_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_library_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_slow_search_stopped",
+        "ok": true
+      },
+      {
+        "test": "owned_directory_recycled",
+        "ok": true
+      }
+    ],
+    "report-image": [
+      {
+        "test": "decoded_local_cover_applied",
+        "ok": true
+      },
+      {
+        "test": "decoded_nas_backdrop_applied",
+        "ok": true
+      },
+      {
+        "test": "owned_album_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_library_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_directory_recycled",
+        "ok": true
+      },
+      {
+        "test": "known_image_caches_cleaned_by_hash",
+        "ok": true
+      }
+    ],
+    "report-public": [
+      {
+        "test": "decoded_url_cover_applied",
+        "ok": true
+      },
+      {
+        "test": "public_remote_playlist_imported_without_nas_fetch",
+        "ok": true
+      },
+      {
+        "test": "owned_live_source_deleted",
+        "ok": true
+      },
+      {
+        "test": "owned_album_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_library_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_directory_recycled",
+        "ok": true
+      },
+      {
+        "test": "known_image_caches_cleaned_by_hash",
+        "ok": true
+      }
+    ]
+  },
+  "cleanup": "All owned NAS objects/tasks and exact known fixture image caches cleaned; no global wipe",
+  "outbound_scope": "video artwork and live URL paths; public DNS pinned per connection, redirects checked locally; native background auto update/refresh blocked",
+  "security_backlog": "Other 14-item plan not globally completed"
+}

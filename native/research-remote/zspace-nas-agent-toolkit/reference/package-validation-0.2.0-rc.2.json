@@ -1,0 +1,71 @@
+{
+  "version": "0.2.0-rc.2",
+  "date": "2026-10-19 Asia/Shanghai",
+  "unit_tests": 181,
+  "cli_contract_tests": 2,
+  "clippy": "passed",
+  "fmt": "passed",
+  "platforms": {
+    "linux-arm64": {
+      "cross_build": "passed",
+      "native_smoke": "pending",
+      "reason": "No native acceptance device exercised"
+    },
+    "windows-x64": {
+      "cross_build": "passed",
+      "native_smoke": "pending",
+      "reason": "No native acceptance device exercised"
+    },
+    "windows-arm64": {
+      "cross_build": "passed",
+      "native_smoke": "pending",
+      "reason": "No native acceptance device exercised"
+    },
+    "darwin-arm64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "native ARM64 macOS",
+      "cross_build": "passed"
+    },
+    "darwin-x64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "Rosetta x64 on ARM64 macOS",
+      "cross_build": "passed"
+    },
+    "linux-x64": {
+      "native_smoke": "passed",
+      "checks": [
+        "version",
+        "help",
+        "catalog_91",
+        "isolated_logged_out_status",
+        "parameter_error_contract"
+      ],
+      "execution": "authorized NAS x86_64, isolated home, no credentials copied",
+      "cross_build": "passed"
+    }
+  },
+  "security_remediation": "14 items deferred by user; draft modules unwired",
+  "business_acceptance": "reference/acceptance-functions-2026-10-19.json; existing same-source business evidence, not all replayed during packaging",
+  "build_toolchain_note": "macOS rust-objcopy debug-strip warning handled by final /usr/bin/strip; Windows SDK restored from release asset, SHA-256 verified before extraction",
+  "windows_build_sdk": {
+    "release": "2026-09-15",
+    "sha256": "6aeecd2d25bcc90c72af09dc525dfdf7143c374d476dc4296692d42efb27a9b9",
+    "verification": "passed before extraction"
+  },
+  "smoked_artifact_hashes_match_final_binaries": true,
+  "all_six_binary_formats_and_versions": "verified by release-manifest.py"
+}

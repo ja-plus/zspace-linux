@@ -1,0 +1,25 @@
+{
+  "version": "0.3.2",
+  "channel": "client-release",
+  "validation_date": "2026-10-22",
+  "timezone": "Asia/Shanghai",
+  "scope": "macOS Agent sandbox login persistence remediation, loaders and thin/offline packaging; no server changes",
+  "fmt": "passed",
+  "unit_tests": "passed: 234",
+  "cli_contract_tests": "passed: 8",
+  "native_clippy": "passed with -D warnings",
+  "six_platform_build": "passed: six release binaries produced; cross-build is not native acceptance",
+  "cdn_publication": "passed: six immutable versioned artifacts uploaded and HTTPS read-back verified by bytes and SHA-256",
+  "cdn_runtime_smoke": "passed on native macOS arm64: clean-cache download, hash verification, execution and second-run cache reuse",
+  "package_validation": "passed for thin and offline variants; final archive hashes are recorded in dist validation records",
+  "real_credentials_used": false,
+  "real_nas_business_api_used": false,
+  "server_changed": false,
+  "native_acceptance": {
+    "macos_arm64_build_host": "passed local build and automated validation; WorkBuddy login remains pending",
+    "workbuddy_macos_sandbox_login": "pending test-team retest",
+    "windows_loader_0_3_1_fixes": "pending native retest",
+    "linux_arm64": "pending",
+    "intel_macos": "pending"
+  }
+}

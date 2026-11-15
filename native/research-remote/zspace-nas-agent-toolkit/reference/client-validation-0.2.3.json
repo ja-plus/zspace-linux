@@ -1,0 +1,29 @@
+{
+  "version": "0.2.3",
+  "channel": "client-release",
+  "scope": "client only; stable packaging of rc.4 remediation; no NAS or OAuth server changes",
+  "validation_date": "2026-10-21",
+  "timezone": "Asia/Shanghai",
+  "fmt": "passed",
+  "unit_tests": {
+    "passed": 233,
+    "failed": 0
+  },
+  "cli_contract_tests": {
+    "passed": 7,
+    "failed": 0
+  },
+  "native_clippy": "passed with -D warnings",
+  "six_platform_build": "passed for macOS x86_64/ARM64, Linux musl x86_64/ARM64, and Windows x86_64/ARM64",
+  "package_validation": "passed: ZIP layout, runtime-only profile exclusion, binary hashes, packaged source hashes, and extracted macOS wrapper smoke",
+  "real_credentials_used": false,
+  "real_nas_business_api_used": false,
+  "server_changed": false,
+  "native_acceptance": {
+    "macos_arm64": "local validation included",
+    "windows_login_rc4": "pending native replay",
+    "windows_write_security": "pending scripts/windows-write-selftest.py",
+    "linux_arm64": "pending",
+    "intel_macos": "pending"
+  }
+}

@@ -1,0 +1,457 @@
+{
+  "date": "2026-10-19 Asia/Shanghai",
+  "status": "ongoing source development after frozen 0.2.0-rc.1 acceptance package",
+  "unit_tests": 181,
+  "cli_contract_tests": 2,
+  "new_actions": [
+    "cloud_search",
+    "collection_add_paths",
+    "collection_artwork_apply",
+    "collection_create",
+    "collection_dismiss",
+    "collection_filters",
+    "collection_info",
+    "collection_list",
+    "collection_match",
+    "collection_paths",
+    "collection_people",
+    "collection_remove_paths",
+    "collection_replace",
+    "collection_seen",
+    "collection_skip_manual",
+    "collection_videos",
+    "favorite_list",
+    "favorite_set",
+    "history_delete",
+    "history_info",
+    "history_list",
+    "history_set",
+    "http",
+    "https",
+    "jpeg",
+    "jpg",
+    "library_share_replace",
+    "live_channel_delete",
+    "live_channel_info",
+    "live_channel_patch",
+    "live_channels",
+    "live_draft",
+    "live_draft_patch",
+    "live_groups",
+    "live_import_file",
+    "live_import_url",
+    "live_source_action",
+    "live_source_patch",
+    "live_sources",
+    "local_path",
+    "play_probe",
+    "play_start",
+    "play_stop",
+    "play_switch",
+    "png",
+    "received_collection_info",
+    "received_collection_videos",
+    "received_collections",
+    "received_libraries",
+    "received_library_state",
+    "received_series_contents",
+    "review_add_videos",
+    "review_annotation_create",
+    "review_annotation_delete",
+    "review_annotation_update",
+    "review_annotations",
+    "review_progress",
+    "review_project_create",
+    "review_project_delete",
+    "review_projects",
+    "review_shares",
+    "review_task_action",
+    "review_tasks",
+    "review_users",
+    "review_videos",
+    "series_add_collections",
+    "series_artwork_apply",
+    "series_contents",
+    "series_create",
+    "series_detach",
+    "series_favorite",
+    "series_info",
+    "series_list",
+    "series_remove_collections",
+    "series_replace",
+    "share_create",
+    "share_delete",
+    "share_stop",
+    "shares",
+    "skip_calculate_classification",
+    "skip_calculate_collection",
+    "skip_edit_result",
+    "skip_results",
+    "skip_set_enabled",
+    "skip_task_action",
+    "skip_task_info",
+    "skip_tasks",
+    "skip_use_smart",
+    "video_add_subtitles",
+    "video_format_menu",
+    "video_formats",
+    "video_streams",
+    "video_subtitles"
+  ],
+  "http_mock_checks": [
+    "local/NAS/URL native image preparation and full metadata apply",
+    "concurrent change prevents edit and retains candidate",
+    "edit error returns partial with applied null",
+    "favorite add/remove use exact library and collection",
+    "stale and foreign-library items never mutate",
+    "series member snapshots and native JSON arrays",
+    "cloud rematch contracts and result relocation semantics",
+    "smart skip task state, relative outro units and snapshot checks",
+    "video share IDs: canonical native strings, empty/foreign deletion blocked",
+    "live source state/snapshot and native form route",
+    "received ACL empty replacement uses literal JSON []",
+    "received state and collection pages require current grant",
+    "review delete blocks tracked transcode tasks",
+    "review task exact project binding, status transition and stale snapshot",
+    "review annotation deletion derives owner identity and rejects orphan replies"
+  ],
+  "live_acceptance": [
+    {
+      "test": "filter_options_read",
+      "ok": true
+    },
+    {
+      "test": "owned_jpeg_and_video_uploaded",
+      "ok": true
+    },
+    {
+      "test": "owned_library_scan_idle",
+      "ok": true
+    },
+    {
+      "test": "owned_video_associated",
+      "ok": true
+    },
+    {
+      "test": "favorite_add_readback",
+      "ok": true
+    },
+    {
+      "test": "favorite_remove_readback",
+      "ok": true
+    },
+    {
+      "test": "local_cover_readback",
+      "ok": true
+    },
+    {
+      "test": "nas_backdrop_readback",
+      "ok": true
+    },
+    {
+      "test": "url_cover_readback",
+      "ok": true
+    },
+    {
+      "test": "owned_collection_dismissed",
+      "ok": true
+    },
+    {
+      "test": "owned_library_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_directory_recycled",
+      "ok": true
+    }
+  ],
+  "security_remediation": "14 items deferred; draft modules unwired",
+  "release": "0.2.0-rc.2 testing candidate includes this source snapshot; package validation is recorded separately",
+  "artwork_cache_cleanup": {
+    "known_candidate_directories_removed": 2,
+    "already_absent_after_native_dismiss": 1,
+    "verified_fixture_hash": true
+  },
+  "live_scope": "owned JPEG/2-second MP4, dedicated library and custom collection; URL source via temporary loopback SSH forwarding; fixtures recycled and exact known cache directories removed",
+  "additional_live_acceptance": {
+    "series": [
+      {
+        "test": "owned_empty_library_created",
+        "ok": true
+      },
+      {
+        "test": "two_owned_empty_collections_created",
+        "ok": true
+      },
+      {
+        "test": "owned_manual_series_created",
+        "ok": true
+      },
+      {
+        "test": "series_listing_verified",
+        "ok": true
+      },
+      {
+        "test": "empty_series_info_and_contents",
+        "ok": true
+      },
+      {
+        "test": "series_metadata_readback",
+        "ok": true
+      },
+      {
+        "test": "two_collections_grouped_readback",
+        "ok": true
+      },
+      {
+        "test": "series_favorite_added",
+        "ok": true
+      },
+      {
+        "test": "series_favorite_removed",
+        "ok": true
+      },
+      {
+        "test": "series_local_cover_readback",
+        "ok": true
+      },
+      {
+        "test": "member_derived_cover_restored",
+        "ok": true
+      },
+      {
+        "test": "one_collection_ungrouped",
+        "ok": true
+      },
+      {
+        "test": "series_removed_from_library_native_metadata_retained",
+        "ok": true
+      },
+      {
+        "test": "member_collections_preserved",
+        "ok": true
+      },
+      {
+        "test": "owned_member_collections_dismissed",
+        "ok": true
+      },
+      {
+        "test": "owned_library_deleted",
+        "ok": true
+      }
+    ],
+    "skip": [
+      {
+        "test": "two_owned_90_second_synthetic_episodes_uploaded",
+        "ok": true
+      },
+      {
+        "test": "owned_library_scan_idle",
+        "ok": true
+      },
+      {
+        "test": "two_episodes_associated_to_owned_tv_collection",
+        "ok": true
+      },
+      {
+        "test": "uncomputed_smart_skip_listing",
+        "ok": true
+      },
+      {
+        "test": "uncomputed_info_and_empty_results",
+        "ok": true
+      },
+      {
+        "test": "owned_library_smart_skip_enabled",
+        "ok": true
+      },
+      {
+        "test": "collection_calculation_submitted_or_existing_task_reused",
+        "ok": true
+      },
+      {
+        "test": "synthetic_calculation_outcome",
+        "ok": true,
+        "task_status": 4,
+        "result_count": 2,
+        "result_error_codes": [
+          0,
+          0
+        ]
+      },
+      {
+        "test": "per_video_skip_result_edit_and_relative_outro_readback",
+        "ok": true
+      },
+      {
+        "test": "smart_mode_selected_manual_values_preserved",
+        "ok": true
+      },
+      {
+        "test": "task_retry_reuses_existing_results_native_semantics",
+        "ok": true
+      },
+      {
+        "test": "exact_task_and_results_cleaned",
+        "ok": true
+      },
+      {
+        "test": "classification_calculation_submitted",
+        "ok": true
+      },
+      {
+        "test": "owned_running_or_queued_task_cancelled",
+        "ok": true
+      },
+      {
+        "test": "owned_library_smart_skip_disabled",
+        "ok": true
+      },
+      {
+        "test": "owned_task_results_final_cleanup",
+        "ok": true
+      },
+      {
+        "test": "owned_tv_collection_dismissed",
+        "ok": true
+      },
+      {
+        "test": "owned_library_deleted",
+        "ok": true
+      },
+      {
+        "test": "owned_synthetic_media_directory_recycled",
+        "ok": true
+      }
+    ],
+    "video-share": [
+      {
+        "test": "owner_share_list_read",
+        "ok": true
+      },
+      {
+        "test": "create_binds_native_missing_id",
+        "ok": true
+      },
+      {
+        "test": "passcode_expiry_visits_readback",
+        "ok": true
+      },
+      {
+        "test": "stop_revokes_remaining_visits",
+        "ok": true
+      },
+      {
+        "test": "delete_exact_share_readback",
+        "ok": true
+      },
+      {
+        "test": "owned_empty_album_removed",
+        "ok": true
+      },
+      {
+        "test": "owned_empty_library_removed",
+        "ok": true
+      }
+    ],
+    "video-live": [
+      {
+        "test": "source_list_read",
+        "ok": true
+      },
+      {
+        "test": "channel_list_read",
+        "ok": true
+      },
+      {
+        "test": "groups_read",
+        "ok": true
+      },
+      {
+        "test": "local_playlist_imported_as_draft",
+        "ok": true
+      },
+      {
+        "test": "draft_patch_readback",
+        "ok": true
+      },
+      {
+        "test": "draft_saved",
+        "ok": true
+      },
+      {
+        "test": "channel_info_read",
+        "ok": true
+      },
+      {
+        "test": "channel_favorite_readback",
+        "ok": true
+      },
+      {
+        "test": "source_rename_readback",
+        "ok": true
+      },
+      {
+        "test": "exact_channel_deleted",
+        "ok": true
+      },
+      {
+        "test": "source_deleted",
+        "ok": true
+      },
+      {
+        "test": "single_url_draft_without_playback",
+        "ok": true
+      },
+      {
+        "test": "draft_cancelled",
+        "ok": true
+      }
+    ],
+    "video-review": [
+      {
+        "test": "owner_projects_read",
+        "ok": true
+      },
+      {
+        "test": "project_create_readback",
+        "ok": true
+      },
+      {
+        "test": "empty_video_list",
+        "ok": true
+      },
+      {
+        "test": "project_admin_read",
+        "ok": true
+      },
+      {
+        "test": "empty_project_shares",
+        "ok": true
+      },
+      {
+        "test": "empty_project_deleted",
+        "ok": true
+      }
+    ]
+  },
+  "cloud_search": {
+    "douban_candidates": 5,
+    "tmdb_candidates": 5,
+    "actual_rematch": "HTTP mock only"
+  },
+  "series_cache_cleanup": {
+    "known_candidate_directories_removed": 1,
+    "already_absent_after_native_dismiss": 0,
+    "verified_fixture_hash": true
+  },
+  "limits": [
+    "Cross-account writes mock only: no dedicated recipient account; no real notifications",
+    "Live remote playlist fetch/periodic refresh and playback not accepted; fixture used example.invalid",
+    "Review: empty owner project lifecycle live accepted; add-video, task controls, annotation/reply mutations protocol implementation; media-bearing review acceptance and visitor/share workflows pending",
+    "Manual series writes only; native detached global metadata retained",
+    "Frozen ZIP/bin unchanged; source changes not released"
+  ],
+  "checks": "full regression and clippy last result recorded in handoff",
+  "release_validation": "reference/package-validation-0.2.0-rc.2.json"
+}

@@ -1,0 +1,2074 @@
+{
+  "date": "2026-10-16 Asia/Shanghai",
+  "status": "functional evidence snapshot included in 0.2.0-rc.1; security remediation deferred",
+  "unit_tests": 159,
+  "cli_contract_tests": 2,
+  "music_extra_acceptance": [
+    {
+      "test": "playlists_read",
+      "ok": true
+    },
+    {
+      "test": "dirs_read",
+      "ok": true
+    },
+    {
+      "test": "task_status_read",
+      "ok": true
+    },
+    {
+      "test": "services_read",
+      "ok": true
+    },
+    {
+      "test": "playlist_create",
+      "ok": true
+    },
+    {
+      "test": "playlist_info",
+      "ok": true
+    },
+    {
+      "test": "playlist_rename",
+      "ok": true
+    },
+    {
+      "test": "empty_playlist_songs",
+      "ok": true
+    },
+    {
+      "test": "wav_fixture_upload",
+      "ok": true
+    },
+    {
+      "test": "empty_directory_add",
+      "ok": true
+    },
+    {
+      "test": "empty_directory_refresh",
+      "ok": true
+    },
+    {
+      "test": "playlist_directory_add",
+      "ok": true
+    },
+    {
+      "test": "song_info_read",
+      "ok": true
+    },
+    {
+      "test": "local_lyrics_read",
+      "ok": true
+    },
+    {
+      "test": "favorite_song_add",
+      "ok": true
+    },
+    {
+      "test": "favorite_song_delete",
+      "ok": true
+    },
+    {
+      "test": "history_add_progress_ms",
+      "ok": true
+    },
+    {
+      "test": "history_delete_exact_song",
+      "ok": true
+    },
+    {
+      "test": "lyrics_cache_save",
+      "ok": true
+    },
+    {
+      "test": "lyrics_cache_clear",
+      "ok": true
+    },
+    {
+      "test": "embedded_lyrics_write",
+      "ok": true
+    },
+    {
+      "test": "embedded_lyrics_local_readback",
+      "ok": true
+    },
+    {
+      "test": "tag_title_patch",
+      "ok": true
+    },
+    {
+      "test": "tag_patch_preserves_artist_and_lyrics",
+      "ok": true
+    },
+    {
+      "test": "playlist_song_remove",
+      "ok": true
+    },
+    {
+      "test": "original_wav_preserved",
+      "ok": true
+    },
+    {
+      "test": "owned_directory_remove",
+      "ok": true
+    },
+    {
+      "test": "owned_playlist_delete",
+      "ok": true
+    },
+    {
+      "test": "playlist_absent_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "audiobooks_acceptance": [
+    {
+      "test": "list_read",
+      "ok": true
+    },
+    {
+      "test": "private_playlist_create",
+      "ok": true
+    },
+    {
+      "test": "info",
+      "ok": true
+    },
+    {
+      "test": "rename",
+      "ok": true
+    },
+    {
+      "test": "wav_upload",
+      "ok": true
+    },
+    {
+      "test": "directory_add",
+      "ok": true
+    },
+    {
+      "test": "tracks_read",
+      "ok": true
+    },
+    {
+      "test": "track_info",
+      "ok": true
+    },
+    {
+      "test": "track_position",
+      "ok": true
+    },
+    {
+      "test": "random_tracks",
+      "ok": true
+    },
+    {
+      "test": "external_status",
+      "ok": true
+    },
+    {
+      "test": "cue_by_track",
+      "ok": true
+    },
+    {
+      "test": "history_add",
+      "ok": true
+    },
+    {
+      "test": "history_progress_ms_readback",
+      "ok": true
+    },
+    {
+      "test": "refresh_submit",
+      "ok": true
+    },
+    {
+      "test": "selected_track_remove",
+      "ok": true
+    },
+    {
+      "test": "original_wav_preserved",
+      "ok": true
+    },
+    {
+      "test": "directory_remove",
+      "ok": true
+    },
+    {
+      "test": "owned_playlist_delete",
+      "ok": true
+    },
+    {
+      "test": "playlist_absent_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "subsonic": "creation/enable/disable/readback passed; intentionally retained disabled per user authorization",
+  "security_remediation": "deferred",
+  "binaries": "old 0.1.4; source only",
+  "reader_acceptance": [
+    {
+      "test": "category_list_read",
+      "ok": true
+    },
+    {
+      "test": "category_create",
+      "ok": true
+    },
+    {
+      "test": "category_info",
+      "ok": true
+    },
+    {
+      "test": "category_rename",
+      "ok": true
+    },
+    {
+      "test": "epub_upload",
+      "ok": true
+    },
+    {
+      "test": "directory_import_submit",
+      "ok": true
+    },
+    {
+      "test": "books_read",
+      "ok": true
+    },
+    {
+      "test": "manage_categories_read",
+      "ok": true
+    },
+    {
+      "test": "manage_files_read",
+      "ok": true
+    },
+    {
+      "test": "shelf_read",
+      "ok": true
+    },
+    {
+      "test": "recent_read",
+      "ok": true
+    },
+    {
+      "test": "search_fixture",
+      "ok": true
+    },
+    {
+      "test": "record_by_path",
+      "ok": true
+    },
+    {
+      "test": "folder_list",
+      "ok": true
+    },
+    {
+      "test": "folder_info",
+      "ok": true
+    },
+    {
+      "test": "shelf_add_exact_book",
+      "ok": true
+    },
+    {
+      "test": "shelf_delete_exact_book",
+      "ok": true
+    },
+    {
+      "test": "read_progress_set",
+      "ok": true
+    },
+    {
+      "test": "read_patch_preserves_progress",
+      "ok": true
+    },
+    {
+      "test": "pin_set",
+      "ok": true
+    },
+    {
+      "test": "pin_clear",
+      "ok": true
+    },
+    {
+      "test": "bookmark_add",
+      "ok": true
+    },
+    {
+      "test": "bookmark_delete_exact",
+      "ok": true
+    },
+    {
+      "test": "book_metadata_update",
+      "ok": true
+    },
+    {
+      "test": "read_clear",
+      "ok": true
+    },
+    {
+      "test": "epub_file_download",
+      "ok": true
+    },
+    {
+      "test": "epub_bytes_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "refresh_submit",
+      "ok": true
+    },
+    {
+      "test": "book_record_remove",
+      "ok": true
+    },
+    {
+      "test": "source_epub_preserved",
+      "ok": true
+    },
+    {
+      "test": "directory_unregister",
+      "ok": true
+    },
+    {
+      "test": "owned_category_delete",
+      "ok": true
+    },
+    {
+      "test": "category_absent_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "reader_conversion_acceptance": [
+    {
+      "test": "mobi_upload",
+      "ok": true
+    },
+    {
+      "test": "mobi_to_epub_download",
+      "ok": true
+    },
+    {
+      "test": "epub_container_and_original_content_verified",
+      "ok": true
+    },
+    {
+      "test": "source_mobi_preserved",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    },
+    {
+      "test": "exact_conversion_cache_removed",
+      "ok": true
+    }
+  ],
+  "comics_acceptance": [
+    {
+      "test": "categories_read",
+      "ok": true
+    },
+    {
+      "test": "dirs_read",
+      "ok": true
+    },
+    {
+      "test": "notebooks_read_redacted",
+      "ok": true
+    },
+    {
+      "test": "flush_info_read",
+      "ok": true
+    },
+    {
+      "test": "category_create",
+      "ok": true
+    },
+    {
+      "test": "category_rename",
+      "ok": true
+    },
+    {
+      "test": "page_upload",
+      "ok": true
+    },
+    {
+      "test": "directory_register",
+      "ok": true
+    },
+    {
+      "test": "comic_create_folder",
+      "ok": true
+    },
+    {
+      "test": "comic_infos",
+      "ok": true
+    },
+    {
+      "test": "comic_list_scoped",
+      "ok": true
+    },
+    {
+      "test": "comic_search",
+      "ok": true
+    },
+    {
+      "test": "comic_edit_name",
+      "ok": true
+    },
+    {
+      "test": "shelf_add",
+      "ok": true
+    },
+    {
+      "test": "progress_set",
+      "ok": true
+    },
+    {
+      "test": "progress_clear_exact",
+      "ok": true
+    },
+    {
+      "test": "shelf_remove",
+      "ok": true
+    },
+    {
+      "test": "notebook_create_env_secret",
+      "ok": true
+    },
+    {
+      "test": "notebook_edit_title",
+      "ok": true
+    },
+    {
+      "test": "notebook_edit_path_preserves_secret",
+      "ok": true
+    },
+    {
+      "test": "notebook_delete_exact",
+      "ok": true
+    },
+    {
+      "test": "flush_scoped_submit",
+      "ok": true
+    },
+    {
+      "test": "flush_scoped_completion",
+      "ok": true
+    },
+    {
+      "test": "owned_flush_progress_clean",
+      "ok": true
+    },
+    {
+      "test": "comic_record_delete",
+      "ok": true
+    },
+    {
+      "test": "source_page_preserved",
+      "ok": true
+    },
+    {
+      "test": "directory_unregister",
+      "ok": true
+    },
+    {
+      "test": "owned_category_cleanup",
+      "ok": true
+    },
+    {
+      "test": "category_absence_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "named_tools": 91,
+  "max_destructive_tools": 50,
+  "vm_acceptance": [
+    {
+      "test": "create_stopped_1gib_vm",
+      "ok": true
+    },
+    {
+      "test": "detail_exact_vm",
+      "ok": true
+    },
+    {
+      "test": "update_title_patch",
+      "ok": true
+    },
+    {
+      "test": "update_preserves_omitted_fields",
+      "ok": true
+    },
+    {
+      "test": "network_config_read",
+      "ok": true
+    },
+    {
+      "test": "guest_nat_network_set",
+      "ok": true
+    },
+    {
+      "test": "guest_network_remove_all_explicit",
+      "ok": true
+    },
+    {
+      "test": "disabled_timer_configure",
+      "ok": true
+    },
+    {
+      "test": "timer_disable_exact_start_schedule",
+      "ok": true
+    },
+    {
+      "test": "base_info",
+      "ok": true
+    },
+    {
+      "test": "disk_list",
+      "ok": true
+    },
+    {
+      "test": "snapshots_read",
+      "ok": true
+    },
+    {
+      "test": "snapshot_state",
+      "ok": true
+    },
+    {
+      "test": "timers_read",
+      "ok": true
+    },
+    {
+      "test": "vnc_status_read",
+      "ok": true
+    },
+    {
+      "test": "vnc_password_enable",
+      "ok": true
+    },
+    {
+      "test": "disk_add_1gib",
+      "ok": true
+    },
+    {
+      "test": "disk_resize_2gib",
+      "ok": true
+    },
+    {
+      "test": "disk_remove_exact_secondary",
+      "ok": true
+    },
+    {
+      "test": "snapshot_create",
+      "ok": true
+    },
+    {
+      "test": "snapshot_revert_own",
+      "ok": true
+    },
+    {
+      "test": "snapshot_delete_own",
+      "ok": true
+    },
+    {
+      "test": "clone_stopped_vm",
+      "ok": true
+    },
+    {
+      "test": "clone_delete",
+      "ok": true
+    },
+    {
+      "test": "native_export_submit",
+      "ok": true
+    },
+    {
+      "test": "export_directory_present",
+      "ok": true
+    },
+    {
+      "test": "native_import_index_check",
+      "ok": true
+    },
+    {
+      "test": "native_import_stopped",
+      "ok": true
+    },
+    {
+      "test": "owned_import_delete",
+      "ok": true
+    },
+    {
+      "test": "ovf_export_submit",
+      "ok": true
+    },
+    {
+      "test": "ovf_parse_exported",
+      "ok": true
+    },
+    {
+      "test": "ovf_import_selected_system_disk",
+      "ok": true
+    },
+    {
+      "test": "owned_ovf_import_delete",
+      "ok": true
+    },
+    {
+      "test": "start_empty_vm",
+      "ok": true
+    },
+    {
+      "test": "pause_reason",
+      "ok": true
+    },
+    {
+      "test": "suspend_vm",
+      "ok": true
+    },
+    {
+      "test": "resume_vm",
+      "ok": true
+    },
+    {
+      "test": "stop_empty_vm_force_confirmed",
+      "ok": true
+    },
+    {
+      "test": "owned_export_recycled",
+      "ok": true
+    },
+    {
+      "test": "owned_vm_delete_disk_and_last_vm_cleanup",
+      "ok": true
+    },
+    {
+      "test": "vm_absent_verified",
+      "ok": true
+    }
+  ],
+  "vm_read_acceptance": [
+    {
+      "action": "environment",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "service",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "host",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "limits",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "pools",
+      "ok": true,
+      "count": 4
+    },
+    {
+      "action": "list",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "usb",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "pci",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "sriov",
+      "ok": true,
+      "count": null
+    }
+  ],
+  "iscsi_acceptance": [
+    {
+      "test": "isolated_group_create",
+      "ok": true
+    },
+    {
+      "test": "group_info",
+      "ok": true
+    },
+    {
+      "test": "group_rename_preserves_initiator",
+      "ok": true
+    },
+    {
+      "test": "disabled_target_create",
+      "ok": true
+    },
+    {
+      "test": "unmapped_sparse_lun_create",
+      "ok": true
+    },
+    {
+      "test": "lun_rename_patch",
+      "ok": true
+    },
+    {
+      "test": "lun_expand_2gib",
+      "ok": true
+    },
+    {
+      "test": "lun_map_readonly_isolated_group",
+      "ok": true
+    },
+    {
+      "test": "target_chap_configure_env_secret",
+      "ok": true
+    },
+    {
+      "test": "target_rename_preserve_mapping",
+      "ok": true
+    },
+    {
+      "test": "target_enable",
+      "ok": true
+    },
+    {
+      "test": "target_disable",
+      "ok": true
+    },
+    {
+      "test": "target_unmap_preserve_lun",
+      "ok": true
+    },
+    {
+      "test": "target_remap_selected",
+      "ok": true
+    },
+    {
+      "test": "target_delete_preserves_lun",
+      "ok": true
+    },
+    {
+      "test": "owned_lun_data_delete",
+      "ok": true
+    },
+    {
+      "test": "lun_absent_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_group_delete",
+      "ok": true
+    },
+    {
+      "test": "group_absent_verified",
+      "ok": true
+    }
+  ],
+  "iscsi_read_acceptance": [
+    {
+      "action": "info",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "sessions",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "pools",
+      "ok": true,
+      "count": 4
+    },
+    {
+      "action": "settings",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "luns",
+      "ok": true,
+      "count": 0
+    },
+    {
+      "action": "targets",
+      "ok": true,
+      "count": 0
+    },
+    {
+      "action": "groups",
+      "ok": true,
+      "count": 0
+    },
+    {
+      "action": "lun_preinfo",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "target_preinfo",
+      "ok": true,
+      "count": null
+    },
+    {
+      "action": "group_preinfo",
+      "ok": true,
+      "count": null
+    }
+  ],
+  "virus_read_acceptance": [
+    {
+      "action": "info",
+      "ok": true
+    },
+    {
+      "action": "settings",
+      "ok": true
+    },
+    {
+      "action": "database",
+      "ok": true
+    },
+    {
+      "action": "engine",
+      "ok": true
+    },
+    {
+      "action": "realtime",
+      "ok": true
+    },
+    {
+      "action": "data_info",
+      "ok": true
+    },
+    {
+      "action": "pools",
+      "ok": true
+    },
+    {
+      "action": "quarantine",
+      "ok": true
+    },
+    {
+      "action": "quarantine_detail",
+      "ok": true
+    },
+    {
+      "action": "schedules",
+      "ok": true
+    },
+    {
+      "action": "schedule",
+      "ok": true
+    },
+    {
+      "action": "summary",
+      "ok": true
+    },
+    {
+      "action": "records",
+      "ok": true
+    },
+    {
+      "action": "whitelist",
+      "ok": true
+    },
+    {
+      "action": "quarantine_files",
+      "ok": true
+    }
+  ],
+  "virus_init_acceptance": [
+    {
+      "test": "authorized_database_storage_submit",
+      "ok": true
+    },
+    {
+      "test": "authorized_database_auto_download_ready_realtime_off",
+      "ok": true
+    }
+  ],
+  "virus_whitelist_acceptance": [
+    {
+      "test": "owned_whitelist_add",
+      "ok": true
+    },
+    {
+      "test": "whitelist_readback_exact_server_path",
+      "ok": true
+    },
+    {
+      "test": "owned_whitelist_delete",
+      "ok": true
+    },
+    {
+      "test": "whitelist_absence_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "virus_scan_acceptance": [
+    {
+      "test": "standard_eicar_fixture_write",
+      "ok": true
+    },
+    {
+      "test": "custom_scan_report_only_submit",
+      "ok": true
+    },
+    {
+      "test": "clean_plus_eicar_detection_completed",
+      "ok": true
+    },
+    {
+      "test": "exact_scan_threat_files",
+      "ok": true
+    },
+    {
+      "test": "report_only_preserves_source",
+      "ok": true
+    },
+    {
+      "test": "scan_summary_read",
+      "ok": true
+    },
+    {
+      "test": "scan_preview_finish",
+      "ok": true
+    },
+    {
+      "test": "quarantine_selected_test_file",
+      "ok": true
+    },
+    {
+      "test": "quarantine_selected_restore",
+      "ok": true
+    },
+    {
+      "test": "restored_source_present",
+      "ok": true
+    },
+    {
+      "test": "requarantine_selected_test_file",
+      "ok": true
+    },
+    {
+      "test": "delete_selected_quarantined_test_file",
+      "ok": true
+    },
+    {
+      "test": "clean_source_retained",
+      "ok": true
+    },
+    {
+      "test": "exact_test_records_delete",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    },
+    {
+      "test": "realtime_remains_disabled",
+      "ok": true
+    }
+  ],
+  "firewall_acceptance": [
+    {
+      "action": "info",
+      "ok": true,
+      "shape": "dict"
+    },
+    {
+      "action": "interfaces",
+      "ok": true,
+      "shape": "list"
+    },
+    {
+      "action": "countries",
+      "ok": true,
+      "shape": "list"
+    },
+    {
+      "action": "services",
+      "ok": true,
+      "shape": "list"
+    },
+    {
+      "action": "precheck",
+      "ok": true,
+      "shape": "str"
+    }
+  ],
+  "time_machine_acceptance": [
+    {
+      "action": "status",
+      "ok": true
+    },
+    {
+      "action": "service",
+      "ok": true
+    },
+    {
+      "action": "limit",
+      "ok": true
+    }
+  ],
+  "usb_mode_acceptance": [
+    {
+      "test": "initial_none",
+      "ok": true
+    },
+    {
+      "test": "create_submitted",
+      "ok": true
+    },
+    {
+      "test": "created_one_gib_ntfs",
+      "ok": true
+    },
+    {
+      "test": "expand_submitted",
+      "ok": true
+    },
+    {
+      "test": "incremental_expansion_verified",
+      "ok": true
+    },
+    {
+      "test": "disabled_no_reboot",
+      "ok": true
+    },
+    {
+      "test": "enabled_internal",
+      "ok": true
+    },
+    {
+      "test": "owned_image_reset",
+      "ok": true
+    },
+    {
+      "test": "initial_none_restored",
+      "ok": true
+    }
+  ],
+  "browser_acceptance": [
+    {
+      "test": "initial_not_installed",
+      "ok": true
+    },
+    {
+      "test": "downloaded_image_present",
+      "ok": true
+    },
+    {
+      "test": "owned_data_directory_created",
+      "ok": true
+    },
+    {
+      "test": "installed_with_env_password",
+      "ok": true
+    },
+    {
+      "test": "container_identity_verified",
+      "ok": true
+    },
+    {
+      "test": "started_running",
+      "ok": true
+    },
+    {
+      "test": "open_ready",
+      "ok": true
+    },
+    {
+      "test": "stopped_exited",
+      "ok": true
+    },
+    {
+      "test": "restarted_running",
+      "ok": true
+    },
+    {
+      "test": "owned_browser_uninstalled",
+      "ok": true
+    },
+    {
+      "test": "not_installed_restored",
+      "ok": true
+    },
+    {
+      "test": "owned_data_directory_recycled",
+      "ok": true
+    },
+    {
+      "test": "owned_image_explicit_remove_and_absent",
+      "ok": true
+    },
+    {
+      "test": "owned_completed_download_task_removed",
+      "ok": true
+    }
+  ],
+  "gpu_acceptance": [
+    {
+      "action": "info",
+      "ok": false,
+      "error": "E_API"
+    },
+    {
+      "action": "tasks",
+      "ok": false,
+      "error": "E_API"
+    },
+    {
+      "action": "tasks",
+      "ok": false,
+      "error": "E_API"
+    }
+  ],
+  "ai_models_read_acceptance": [
+    {
+      "action": "disks",
+      "ok": true,
+      "state": null,
+      "models": 4
+    },
+    {
+      "action": "models",
+      "ok": true,
+      "state": null,
+      "models": 4
+    },
+    {
+      "action": "state",
+      "ok": true,
+      "state": "stop",
+      "models": 0
+    },
+    {
+      "action": "download_state",
+      "ok": true,
+      "state": null,
+      "models": 0
+    }
+  ],
+  "cleanup_followup": {
+    "usb_owned_image_absent": true,
+    "virus_owned_record_absent": true,
+    "browser_owned_image_and_download_task_absent": true,
+    "interrupted_owned_album_orphan_comments_removed": 2,
+    "interrupted_owned_baby_growth_rows_removed": 2
+  },
+  "album_groups_acceptance": [
+    {
+      "test": "roles_read",
+      "ok": true
+    },
+    {
+      "test": "custom_role_added",
+      "ok": true
+    },
+    {
+      "test": "custom_role_deleted",
+      "ok": true
+    },
+    {
+      "test": "family_created",
+      "ok": true
+    },
+    {
+      "test": "family_info_verified",
+      "ok": true
+    },
+    {
+      "test": "family_configured",
+      "ok": true
+    },
+    {
+      "test": "family_configuration_verified",
+      "ok": true
+    },
+    {
+      "test": "family_owned_album_deleted",
+      "ok": true
+    },
+    {
+      "test": "baby_created",
+      "ok": true
+    },
+    {
+      "test": "baby_info_verified",
+      "ok": true
+    },
+    {
+      "test": "baby_configured",
+      "ok": true
+    },
+    {
+      "test": "baby_configuration_verified",
+      "ok": true
+    },
+    {
+      "test": "baby_owned_album_deleted",
+      "ok": true
+    },
+    {
+      "test": "memorial_created",
+      "ok": true
+    },
+    {
+      "test": "memorial_info_verified",
+      "ok": true
+    },
+    {
+      "test": "memorial_configured",
+      "ok": true
+    },
+    {
+      "test": "memorial_configuration_verified",
+      "ok": true
+    },
+    {
+      "test": "memorial_owned_album_deleted",
+      "ok": true
+    }
+  ],
+  "baby_growth_acceptance": [
+    {
+      "test": "owned_baby_album_created",
+      "ok": true
+    },
+    {
+      "test": "initial_timeline_empty",
+      "ok": true
+    },
+    {
+      "test": "growth_saved",
+      "ok": true
+    },
+    {
+      "test": "growth_info_verified",
+      "ok": true
+    },
+    {
+      "test": "baby_comment_created",
+      "ok": true
+    },
+    {
+      "test": "baby_comment_list_verified",
+      "ok": true
+    },
+    {
+      "test": "baby_reply_created",
+      "ok": true
+    },
+    {
+      "test": "baby_growth_with_comments_delete_blocked",
+      "ok": true
+    },
+    {
+      "test": "baby_comments_cleaned",
+      "ok": true
+    },
+    {
+      "test": "growth_liked",
+      "ok": true
+    },
+    {
+      "test": "like_detail_bitmap_verified",
+      "ok": true
+    },
+    {
+      "test": "unlike_detail_bitmap_verified",
+      "ok": true
+    },
+    {
+      "test": "milestone_enabled_verified",
+      "ok": true
+    },
+    {
+      "test": "milestone_disabled_verified",
+      "ok": true
+    },
+    {
+      "test": "growth_replaced_preserving_visibility",
+      "ok": true
+    },
+    {
+      "test": "content_location_visibility_verified",
+      "ok": true
+    },
+    {
+      "test": "growth_deleted_timeline_empty",
+      "ok": true
+    },
+    {
+      "test": "owned_baby_album_deleted",
+      "ok": true
+    }
+  ],
+  "memorial_posts_acceptance": [
+    {
+      "test": "owned_image_uploaded",
+      "ok": true
+    },
+    {
+      "test": "owned_source_registered",
+      "ok": true
+    },
+    {
+      "test": "owned_memorial_created",
+      "ok": true
+    },
+    {
+      "test": "first_image_post_created",
+      "ok": true
+    },
+    {
+      "test": "post_info_verified",
+      "ok": true
+    },
+    {
+      "test": "memorial_comment_created",
+      "ok": true
+    },
+    {
+      "test": "memorial_comment_list_verified",
+      "ok": true
+    },
+    {
+      "test": "memorial_reply_created",
+      "ok": true
+    },
+    {
+      "test": "post_with_comments_delete_blocked",
+      "ok": true
+    },
+    {
+      "test": "memorial_comments_cleaned",
+      "ok": true
+    },
+    {
+      "test": "post_like_verified",
+      "ok": true
+    },
+    {
+      "test": "post_unlike_verified",
+      "ok": true
+    },
+    {
+      "test": "post_full_replacement_verified",
+      "ok": true
+    },
+    {
+      "test": "subsequent_text_post_created",
+      "ok": true
+    },
+    {
+      "test": "post_list_count_verified",
+      "ok": true
+    },
+    {
+      "test": "posts_deleted",
+      "ok": true
+    },
+    {
+      "test": "original_photo_preserved",
+      "ok": true
+    },
+    {
+      "test": "owned_source_unregistered",
+      "ok": true
+    },
+    {
+      "test": "owned_memorial_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_image_directory_recycled",
+      "ok": true
+    }
+  ],
+  "album_database_acceptance": [
+    {
+      "action": "db_status",
+      "ok": true
+    },
+    {
+      "action": "db_size",
+      "ok": true
+    },
+    {
+      "action": "db_backup_info",
+      "ok": true
+    },
+    {
+      "action": "db_upgrade_progress",
+      "ok": true
+    },
+    {
+      "action": "db_migrate_progress",
+      "ok": true
+    },
+    {
+      "test": "backup_frequency_set",
+      "ok": true
+    },
+    {
+      "test": "backup_frequency_verified_retention_preserved",
+      "ok": true
+    },
+    {
+      "test": "backup_frequency_restored_verified",
+      "ok": true
+    }
+  ],
+  "album_export_acceptance": [
+    {
+      "test": "owned_fixture_uploaded",
+      "ok": true
+    },
+    {
+      "test": "own_album_and_source_created",
+      "ok": true
+    },
+    {
+      "test": "photo_imported",
+      "ok": true
+    },
+    {
+      "test": "one_photo_verified",
+      "ok": true
+    },
+    {
+      "test": "collision_sentinel_created",
+      "ok": true
+    },
+    {
+      "test": "initial_export_tasks_empty",
+      "ok": true
+    },
+    {
+      "test": "export_submitted",
+      "ok": true
+    },
+    {
+      "test": "export_success_verified",
+      "ok": true
+    },
+    {
+      "test": "export_no_errors",
+      "ok": true
+    },
+    {
+      "test": "renamed_export_content_matches",
+      "ok": true
+    },
+    {
+      "test": "collision_original_preserved",
+      "ok": true
+    },
+    {
+      "test": "finished_task_acknowledged",
+      "ok": true
+    },
+    {
+      "test": "repeat_export_skips_identical_file",
+      "ok": true
+    },
+    {
+      "test": "repeat_task_acknowledged",
+      "ok": true
+    },
+    {
+      "test": "owned_source_unregistered",
+      "ok": true
+    },
+    {
+      "test": "owned_album_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_directories_recycled",
+      "ok": true
+    }
+  ],
+  "album_metadata_acceptance": {
+    "attribute_lifecycle_checks": 9,
+    "timeline_mutations_verified": 2,
+    "exif_read": "passed_after_cookie_compat_fix",
+    "exif_write": "date_gps_original_and_display_rotation_verified",
+    "exif_live_verified": true,
+    "owned_fixtures_cleaned": true,
+    "partial_failure_and_stale_attributes_mock": true,
+    "registered_exif_checks": [
+      {
+        "test": "owned_photo_imported",
+        "ok": true
+      },
+      {
+        "test": "registered_photo_exif_read",
+        "ok": true
+      },
+      {
+        "test": "orientation_write_reported_success",
+        "ok": true
+      },
+      {
+        "test": "display_orientation_verified",
+        "ok": true
+      },
+      {
+        "test": "date_and_gps_readback_verified",
+        "ok": true
+      },
+      {
+        "test": "owned_source_unregistered",
+        "ok": true
+      },
+      {
+        "test": "owned_album_deleted",
+        "ok": true
+      },
+      {
+        "test": "owned_directory_recycled",
+        "ok": true
+      }
+    ],
+    "gps_clear": "unsupported_parameter_removed",
+    "shared_exif": "not_verified"
+  },
+  "time_machine_mac_acceptance": "pending_no_test_mac_user_confirmed",
+  "ai_generation_acceptance": {
+    "checks": [
+      {
+        "test": "owned_model_download_complete",
+        "ok": true
+      },
+      {
+        "test": "cpu_engine_start_submitted",
+        "ok": true
+      },
+      {
+        "test": "cpu_engine_running",
+        "ok": true
+      },
+      {
+        "test": "real_chat_sse_completed",
+        "ok": true
+      },
+      {
+        "test": "owned_engine_stop_submitted",
+        "ok": true
+      },
+      {
+        "test": "owned_model_cleaned",
+        "ok": true
+      },
+      {
+        "test": "final_engine_stopped_and_no_installed_models",
+        "ok": true
+      }
+    ],
+    "model": "ds1d5",
+    "device": "cpu",
+    "cleanup_policy": "delete_after_acceptance",
+    "first_attempt": "script_schema_error_then_cleaned",
+    "first_attempt_counted_as_generation": false
+  },
+  "album_copy_acceptance": {
+    "passed_checks": 10,
+    "fixtures_cleaned": true,
+    "dynamic_link_unlink": "mock_protocol_passed_only"
+  },
+  "album_share_acceptance": [
+    {
+      "test": "owned_photo_imported",
+      "ok": true
+    },
+    {
+      "test": "passcode_share_created",
+      "ok": true
+    },
+    {
+      "test": "owned_share_scope_limits_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_share_stopped_and_limits_zeroed",
+      "ok": true
+    },
+    {
+      "test": "interrupted_share_deleted_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_share_stop_zeroes_visits_list_reports_expired",
+      "ok": true
+    },
+    {
+      "test": "owned_share_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_source_unregistered",
+      "ok": true
+    },
+    {
+      "test": "owned_album_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_directory_recycled",
+      "ok": true
+    }
+  ],
+  "album_subalbums_acceptance": [
+    {
+      "test": "owned_scope_initially_unconfigured",
+      "ok": true
+    },
+    {
+      "test": "manual_geo_configuration_verified",
+      "ok": true
+    },
+    {
+      "test": "geo_status_read",
+      "ok": true
+    },
+    {
+      "test": "geo_list_read",
+      "ok": true
+    },
+    {
+      "test": "face_status_read",
+      "ok": true
+    },
+    {
+      "test": "face_list_read",
+      "ok": true
+    },
+    {
+      "test": "empty_owned_geo_refresh_submitted",
+      "ok": true
+    },
+    {
+      "test": "empty_owned_geo_refresh_completed",
+      "ok": true
+    },
+    {
+      "test": "single_dimension_clean_disabled_geo",
+      "ok": true
+    },
+    {
+      "test": "owned_configuration_removed",
+      "ok": true
+    },
+    {
+      "test": "owned_parent_album_deleted",
+      "ok": true
+    }
+  ],
+  "album_feed_acceptance": [
+    {
+      "test": "owned_photo_imported",
+      "ok": true
+    },
+    {
+      "test": "own_photo_like_True_verified",
+      "ok": true
+    },
+    {
+      "test": "own_photo_like_False_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_source_unregistered",
+      "ok": true
+    },
+    {
+      "test": "owned_album_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_directory_recycled",
+      "ok": true
+    }
+  ],
+  "album_ai_read_acceptance": [
+    {
+      "action": "photo_ai_config",
+      "ok": true
+    },
+    {
+      "action": "photo_ai_options",
+      "ok": true
+    },
+    {
+      "action": "photo_ai_clean_status",
+      "ok": true
+    },
+    {
+      "action": "photo_ai_rescene_status",
+      "ok": true
+    }
+  ],
+  "video_collection_acceptance": [
+    {
+      "test": "owned_empty_library_created",
+      "ok": true
+    },
+    {
+      "test": "owned_custom_collection_created",
+      "ok": true
+    },
+    {
+      "test": "metadata_create_verified",
+      "ok": true
+    },
+    {
+      "test": "collection_people_read",
+      "ok": true
+    },
+    {
+      "test": "collection_videos_read",
+      "ok": true
+    },
+    {
+      "test": "seen_True_verified",
+      "ok": true
+    },
+    {
+      "test": "seen_False_verified",
+      "ok": true
+    },
+    {
+      "test": "full_metadata_replacement_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_collection_dismissed",
+      "ok": true
+    },
+    {
+      "test": "owned_library_deleted",
+      "ok": true
+    }
+  ],
+  "video_media_acceptance": {
+    "passed": [
+      {
+        "test": "owned_media_uploaded",
+        "ok": true
+      },
+      {
+        "test": "owned_media_library_created",
+        "ok": true
+      },
+      {
+        "test": "owned_custom_collection_created",
+        "ok": true
+      },
+      {
+        "test": "owned_file_associated",
+        "ok": true
+      },
+      {
+        "test": "direct_path_association_verified",
+        "ok": true
+      },
+      {
+        "test": "collection_video_resources_read",
+        "ok": true
+      },
+      {
+        "test": "owned_path_unmatched",
+        "ok": true
+      },
+      {
+        "test": "original_media_preserved",
+        "ok": true
+      },
+      {
+        "test": "owned_library_deleted",
+        "ok": true
+      },
+      {
+        "test": "owned_media_directory_recycled",
+        "ok": true
+      }
+    ],
+    "streams": {
+      "audio_tracks": 2,
+      "subtitle_tracks": 1,
+      "verified": true
+    },
+    "fixture": "generated_2s_2audio_1subtitle_39918bytes",
+    "nas_fixtures_cleaned": true,
+    "transcode_compatibility": {
+      "cookie_version": "2.3.2026101201",
+      "app": "file",
+      "scope": "/transcode/",
+      "cli_device_preserved": true
+    }
+  },
+  "video_manual_skip_acceptance": [
+    {
+      "test": "owned_empty_library_created",
+      "ok": true
+    },
+    {
+      "test": "owned_custom_collection_created",
+      "ok": true
+    },
+    {
+      "test": "metadata_create_verified",
+      "ok": true
+    },
+    {
+      "test": "collection_people_read",
+      "ok": true
+    },
+    {
+      "test": "collection_videos_read",
+      "ok": true
+    },
+    {
+      "test": "seen_True_verified",
+      "ok": true
+    },
+    {
+      "test": "seen_False_verified",
+      "ok": true
+    },
+    {
+      "test": "full_metadata_replacement_verified",
+      "ok": true
+    },
+    {
+      "test": "manual_intro_outro_seconds_verified",
+      "ok": true
+    },
+    {
+      "test": "manual_skip_zeroed_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_collection_dismissed",
+      "ok": true
+    },
+    {
+      "test": "owned_library_deleted",
+      "ok": true
+    }
+  ],
+  "video_resource_acceptance": [
+    {
+      "test": "owned_video_and_subtitle_uploaded",
+      "ok": true
+    },
+    {
+      "test": "owned_empty_library_created",
+      "ok": true
+    },
+    {
+      "test": "video_format_menu_read",
+      "ok": true
+    },
+    {
+      "test": "video_formats_read",
+      "ok": true
+    },
+    {
+      "test": "external_subtitle_discovery_read",
+      "ok": true
+    },
+    {
+      "test": "specified_external_subtitle_prepared",
+      "ok": true
+    },
+    {
+      "test": "owned_library_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_media_directory_recycled",
+      "ok": true
+    }
+  ],
+  "video_history_acceptance": [
+    {
+      "test": "owned_media_uploaded",
+      "ok": true
+    },
+    {
+      "test": "owned_media_library_created",
+      "ok": true
+    },
+    {
+      "test": "owned_library_scan_and_scrape_idle",
+      "ok": true
+    },
+    {
+      "test": "owned_custom_collection_created",
+      "ok": true
+    },
+    {
+      "test": "owned_file_associated",
+      "ok": true
+    },
+    {
+      "test": "direct_path_association_verified",
+      "ok": true
+    },
+    {
+      "test": "collection_video_resources_read",
+      "ok": true
+    },
+    {
+      "test": "two_audio_and_subtitle_tracks_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_history_initially_absent",
+      "ok": true
+    },
+    {
+      "test": "history_position_1_and_settings_verified",
+      "ok": true
+    },
+    {
+      "test": "history_position_0_and_settings_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_history_listed",
+      "ok": true
+    },
+    {
+      "test": "owned_history_deleted_and_absent",
+      "ok": true
+    },
+    {
+      "test": "repeat_history_delete_is_idempotent",
+      "ok": true
+    },
+    {
+      "test": "owned_path_unmatched",
+      "ok": true
+    },
+    {
+      "test": "original_media_preserved",
+      "ok": true
+    },
+    {
+      "test": "owned_library_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_media_directory_recycled",
+      "ok": true
+    }
+  ],
+  "video_association_scan_guard": {
+    "busy_mock": "passed",
+    "idle_live_lifecycle": "passed",
+    "atomic_with_external_tasks": false
+  },
+  "video_playback_acceptance": [
+    {
+      "test": "owned_short_video_uploaded",
+      "ok": true
+    },
+    {
+      "test": "owned_playback_library_created",
+      "ok": true
+    },
+    {
+      "test": "fixture_tracks_verified",
+      "ok": true
+    },
+    {
+      "test": "owned_copy_stream_started",
+      "ok": true
+    },
+    {
+      "test": "initial_hls_manifest_read",
+      "ok": true
+    },
+    {
+      "test": "second_audio_track_selected",
+      "ok": true
+    },
+    {
+      "test": "switched_stream_resource_read",
+      "ok": true
+    },
+    {
+      "test": "embedded_subtitle_selected",
+      "ok": true
+    },
+    {
+      "test": "subtitle_stream_resource_read",
+      "ok": true
+    },
+    {
+      "test": "owned_stream_stop_acknowledged",
+      "ok": true
+    },
+    {
+      "test": "owned_stream_stop_acknowledged",
+      "ok": true
+    },
+    {
+      "test": "owned_stream_stop_acknowledged",
+      "ok": true
+    },
+    {
+      "test": "owned_playback_library_deleted",
+      "ok": true
+    },
+    {
+      "test": "owned_short_video_directory_recycled",
+      "ok": true
+    }
+  ],
+  "video_playback_limitations": [
+    "resource/API_chain_only_not_audiovisual_rendering",
+    "local_network_only",
+    "no_strm_live_acceptance"
+  ]
+}

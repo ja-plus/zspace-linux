@@ -1,0 +1,12 @@
+{
+  "version":"0.3.11",
+  "published":true,
+  "artifacts":[
+    {"platform":"darwin-arm64","version":"0.3.11","url":"https://update.zenithspace.net/AgentToolkit/20261023/zspace-cli-v0.3.11-darwin-arm64","sha256":"f438303c204702e5028751c1c3a26d0c5ff0dc956801a6ef6dd30fbbb4338f7d","bytes":4568808,"filename":"zspace-cli-v0.3.11-darwin-arm64"},
+    {"platform":"darwin-x64","version":"0.3.11","url":"https://update.zenithspace.net/AgentToolkit/20261023/zspace-cli-v0.3.11-darwin-x64","sha256":"312a08e3b3ed6f5660b9490255a379cb107f43efcd684cb25717fba93a7d2f5d","bytes":6113320,"filename":"zspace-cli-v0.3.11-darwin-x64"},
+    {"platform":"linux-arm64","version":"0.3.11","url":"https://update.zenithspace.net/AgentToolkit/20261023/zspace-cli-v0.3.11-linux-arm64","sha256":"200099ea0cbae6e1a4769a68975e628493301a6a19b2912043053f1a29b33fa2","bytes":5456016,"filename":"zspace-cli-v0.3.11-linux-arm64"},
+    {"platform":"linux-x64","version":"0.3.11","url":"https://update.zenithspace.net/AgentToolkit/20261023/zspace-cli-v0.3.11-linux-x64","sha256":"97ed9ea7fdeb88129498838eac3493a546008d2ef4e20778fd4d5538016616a7","bytes":6956744,"filename":"zspace-cli-v0.3.11-linux-x64"},
+    {"platform":"windows-arm64","version":"0.3.11","url":"https://update.zenithspace.net/AgentToolkit/20261023/zspace-cli-v0.3.11-windows-arm64.exe","sha256":"611baefd7eca61af848ed150f2924c933dce84bc3dd25c0270e22520d415d09c","bytes":5476864,"filename":"zspace-cli-v0.3.11-windows-arm64.exe"},
+    {"platform":"windows-x64","version":"0.3.11","url":"https://update.zenithspace.net/AgentToolkit/20261023/zspace-cli-v0.3.11-windows-x64.exe","sha256":"5d5f1468dab6fd6151b03a96d7ddfd0aaf579730b4f37cbcc30ddfcdf54a8031","bytes":6181376,"filename":"zspace-cli-v0.3.11-windows-x64.exe"}
+  ]
+}

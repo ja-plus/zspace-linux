@@ -1,0 +1,27 @@
+{
+  "version": "0.3.0",
+  "channel": "client-release",
+  "validation_date": "2026-10-22",
+  "timezone": "Asia/Shanghai",
+  "scope": "client thin/offline packaging and pinned runtime loader; no NAS/OAuth server changes",
+  "fmt": "passed",
+  "unit_tests": {"passed": 233, "failed": 0},
+  "cli_contract_tests": {"passed": 7, "failed": 0},
+  "native_clippy": "passed with -D warnings",
+  "six_platform_build": "passed for macOS x86_64/ARM64, Linux musl x86_64/ARM64, and Windows x86_64/ARM64; architecture formats and embedded version verified",
+  "runtime_loader_fixture": "passed on macOS ARM64: first download, verified cache hit, corrupted cache replacement, four-process concurrency, hash mismatch cleanup, redirect/404 rejection, truncated response rejection, symlink-cache rejection, argv/stdout/stderr/exit-code passthrough",
+  "thin_package_validation": "passed; no bundled binaries; under 2.5 MiB",
+  "offline_package_validation": "passed; six bundled binaries and native wrapper smoke",
+  "cdn_publication": "passed; six immutable 0.3.0 artifacts uploaded and downloaded back with matching byte counts and SHA-256",
+  "real_cdn_smoke": "passed on macOS ARM64 with isolated HOME: first run downloaded and verified darwin-arm64; second run executed the verified version cache",
+  "real_credentials_used": false,
+  "real_nas_business_api_used": false,
+  "server_changed": false,
+  "native_acceptance": {
+    "macos_arm64": "local thin/offline validation and real CDN smoke passed",
+    "windows_runtime_loader": "pending native selftest",
+    "windows_write_security": "pending native selftest",
+    "linux_arm64": "pending",
+    "intel_macos": "pending"
+  }
+}

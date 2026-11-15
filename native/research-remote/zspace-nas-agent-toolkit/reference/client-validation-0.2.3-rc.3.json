@@ -1,0 +1,43 @@
+{
+  "version": "0.2.3-rc.3",
+  "channel": "candidate",
+  "scope": "client only; local artifacts; login interaction revision; no NAS or OAuth server changes",
+  "validation_date": "2026-10-21",
+  "timezone": "Asia/Shanghai",
+  "fmt": "passed",
+  "unit_tests": {
+    "passed": 232,
+    "failed": 0
+  },
+  "cli_contract_tests": {
+    "passed": 4,
+    "failed": 0
+  },
+  "native_clippy": "passed with -D warnings",
+  "release_builds": {
+    "darwin-arm64": "passed",
+    "darwin-x64": "passed",
+    "linux-arm64-musl": "passed",
+    "linux-x64-musl": "passed",
+    "windows-arm64-msvc": "passed cross-build",
+    "windows-x64-msvc": "passed cross-build"
+  },
+  "login_change": {
+    "agent_command": "login --no-open",
+    "link_delivery": "Agent relays the per-transaction URL to the user",
+    "authorization_code": "user replies to the current Agent; Agent forwards only to the pending hidden input",
+    "secret_storage_in_arguments_environment_files_or_logs": false,
+    "transaction_timeout_seconds": 180,
+    "oauth_protocol_changed": false
+  },
+  "real_credentials_used": false,
+  "real_nas_business_api_used": false,
+  "server_changed": false,
+  "native_acceptance": {
+    "windows_x64": "pending test-team execution of scripts/windows-write-selftest.py",
+    "windows_arm64": "pending test-team execution of scripts/windows-write-selftest.py",
+    "linux_arm64": "pending",
+    "intel_macos": "pending; x64 build is not Intel native validation"
+  },
+  "inherited_boundaries": "See release-0.2.3-rc.3.md and the referenced 0.2.3-rc.2 remediation documents"
+}

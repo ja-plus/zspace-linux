@@ -1,0 +1,9 @@
+{
+  "version": "0.3.11",
+  "validation_date": "2026-10-23",
+  "scope": "0.3.10 Windows and two-NAS report remediation",
+  "large_file_native": "pending: corrected unitless Content-Range; strict bounds retained",
+  "windows_cli_temp_cleanup": "pending native retest",
+  "server_changed": false,
+  "real_credentials_used": false
+}

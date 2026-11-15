@@ -1,0 +1,8 @@
+{
+  "version": "0.3.7",
+  "validation_date": "2026-10-23",
+  "scope": "0.3.6 Windows regression A/B remediation",
+  "windows_native": "pending; Windows PowerShell 5.1 self-test and actual login must be rerun",
+  "server_changed": false,
+  "real_credentials_used": false
+}

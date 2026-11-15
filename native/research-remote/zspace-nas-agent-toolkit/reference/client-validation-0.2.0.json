@@ -1,0 +1,126 @@
+{
+  "version": "0.2.0",
+  "scope": "client only; local release; server unchanged",
+  "unit_tests": 212,
+  "cli_contract_tests": 2,
+  "fmt": "passed",
+  "native_clippy": "passed",
+  "windows_cross_clippy": {
+    "x64": "passed",
+    "arm64": "passed"
+  },
+  "binaries_built": [
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-arm64",
+    "linux-x64",
+    "windows-arm64",
+    "windows-x64"
+  ],
+  "native_security_process_checks": {
+    "macos_arm64": {
+      "passed": 17,
+      "checks": [
+        "isolated status",
+        "forced LAN fails closed",
+        "unsafe host rejected",
+        "empty restore refused",
+        "unknown field refused",
+        "encoded path refused",
+        "duplicate JSON refused",
+        "placeholder refused",
+        "private download refused",
+        "public download requires transient consent",
+        "resume requires transient consent",
+        "persisted consent cannot enable download",
+        "HTTP requires explicit downgrade",
+        "raw query rejected",
+        "nested placeholder rejected",
+        "file-only logout",
+        "logout persists"
+      ],
+      "real_credentials_used": false
+    },
+    "macos_x64_rosetta": {
+      "passed": 17,
+      "checks": [
+        "isolated status",
+        "forced LAN fails closed",
+        "unsafe host rejected",
+        "empty restore refused",
+        "unknown field refused",
+        "encoded path refused",
+        "duplicate JSON refused",
+        "placeholder refused",
+        "private download refused",
+        "public download requires transient consent",
+        "resume requires transient consent",
+        "persisted consent cannot enable download",
+        "HTTP requires explicit downgrade",
+        "raw query rejected",
+        "nested placeholder rejected",
+        "file-only logout",
+        "logout persists"
+      ],
+      "real_credentials_used": false
+    },
+    "linux_x64": {
+      "passed": 17,
+      "checks": [
+        "isolated status",
+        "forced LAN fails closed",
+        "unsafe host rejected",
+        "empty restore refused",
+        "unknown field refused",
+        "encoded path refused",
+        "duplicate JSON refused",
+        "placeholder refused",
+        "private download refused",
+        "public download requires transient consent",
+        "resume requires transient consent",
+        "persisted consent cannot enable download",
+        "HTTP requires explicit downgrade",
+        "raw query rejected",
+        "nested placeholder rejected",
+        "file-only logout",
+        "logout persists"
+      ],
+      "real_credentials_used": false,
+      "platform": "Linux x86_64 NAS native",
+      "source_profile": "isolated synthetic credentials",
+      "remote_temporary_removed": true
+    }
+  },
+  "platform_support": {
+    "darwin-arm64": "supported",
+    "linux-x64": "supported",
+    "darwin-x64": "test only; Rosetta checked; Intel native pending",
+    "linux-arm64": "native acceptance pending",
+    "windows-arm64": "native permission/runtime acceptance pending",
+    "windows-x64": "native permission/runtime acceptance pending"
+  },
+  "current_binary_live_readonly": {
+    "version": "0.2.0",
+    "checks": [
+      {
+        "command": "status",
+        "passed": true
+      },
+      {
+        "command": "doctor",
+        "passed": false,
+        "error_code": "E_OAUTH"
+      }
+    ],
+    "credentials_printed": false
+  },
+  "prior_live_security_evidence": {
+    "file": "audit/live-security-2026-10-19.json",
+    "sha256": "7e4e1ca1f887575d64cb3abcd0ff31a61f2fc072bc5c322f6ecd5181cf903d5d",
+    "scope": "earlier security source revision; not a rerun of every final binary"
+  },
+  "authorization_input": "existing current-session hidden input retained",
+  "delegated_downloads": "default deny network writes; per-command --allow-nas-fetch and existing --yes",
+  "dependencies": "dependency-audit-0.2.0.json; RSA advisory retained with public-encryption-only applicability assessment",
+  "signing": "unsigned; checksums provide integrity, not publisher authentication"
+}

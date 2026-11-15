@@ -1,0 +1,17 @@
+{
+  "version": "0.3.5",
+  "validation_date": "2026-10-22",
+  "scope": "T2S-UCP5 and Z2Pro-V89F legacy report remediation; client, docs and packaging only",
+  "status": "passed within stated non-native boundaries",
+  "fmt": "passed",
+  "unit_tests": "passed: 239",
+  "cli_contract_tests": "passed: 8",
+  "native_clippy": "passed with -D warnings",
+  "six_platform_build": "passed: six release binaries produced; cross-build is not native acceptance",
+  "cdn_publication": "passed: six immutable versioned artifacts uploaded and HTTPS read-back verified by bytes and SHA-256",
+  "package_validation": "passed for thin and offline variants; exact hashes are in dist validation records",
+  "server_changed": false,
+  "real_credentials_used": false,
+  "arm_native_business_retest": "pending on T2S-UCP5 and Z2Pro-V89F",
+  "other_native_boundaries": "Windows PowerShell/CMD, Intel Mac, Linux ARM64 and WorkBuddy macOS sandbox remain pending"
+}

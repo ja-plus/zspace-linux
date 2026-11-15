@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/check_update.sh --force)",
+      "Bash(scripts/check_update.sh)"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "version": "0.3.1",
+  "channel": "client-release",
+  "validation_date": "2026-10-22",
+  "timezone": "Asia/Shanghai",
+  "scope": "Windows thin-loader remediation and client thin/offline packaging; no NAS/OAuth server changes",
+  "fmt": "passed",
+  "unit_tests": {"passed": 233, "failed": 0},
+  "cli_contract_tests": {"passed": 7, "failed": 0},
+  "native_clippy": "passed with -D warnings",
+  "six_platform_build": "passed; Mach-O arm64/x86_64, static ELF arm64/x86_64, and PE ARM64/x86_64 formats verified",
+  "runtime_loader_fixture": "passed on macOS ARM64, including pretty-printed manifest parsing, fixed-host rejection, simulated MINGW64 x64 mapping, cache integrity, concurrency, failure cleanup, and argument/exit-code passthrough",
+  "cdn_publication": "not performed; external publication approval was not granted for 0.3.1, so runtime-artifacts.json remains published:false",
+  "package_validation": "passed for thin and offline; thin remains a non-network release candidate until 0.3.1 CDN publication",
+  "server_changed": false,
+  "native_acceptance": {
+    "macos_arm64": "local thin/offline fixture and native wrapper validation passed",
+    "windows_cli_business_and_write_0_3_0": "passed by test team",
+    "windows_loader_0_3_1": "pending native PowerShell 5.1 retest",
+    "linux_arm64": "pending",
+    "intel_macos": "pending"
+  }
+}

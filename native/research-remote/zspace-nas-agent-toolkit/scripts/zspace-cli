@@ -1,0 +1,112 @@
+#!/usr/bin/env sh
+set -eu
+
+error() {
+  code=$1
+  message=$2
+  if [ -n "${TMP:-}" ]; then rm -f -- "$TMP" 2>/dev/null || true; fi
+  printf '{"ok":false,"error":{"code":"%s","message":"%s"}}\n' "$code" "$message" >&2
+  exit 2
+}
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT_DIR=$(dirname "$SCRIPT_DIR")
+ALLOW_HTTP=${ZSPACE_RUNTIME_ALLOW_HTTP_FIXTURE:-0}
+if [ "$ALLOW_HTTP" = 1 ] && [ -n "${ZSPACE_RUNTIME_MANIFEST:-}" ]; then MANIFEST=$ZSPACE_RUNTIME_MANIFEST
+else MANIFEST="$ROOT_DIR/runtime-artifacts.json"; fi
+OS=$(uname -s)
+ARCH=$(uname -m)
+
+case "$OS/$ARCH" in
+  Darwin/arm64|Darwin/aarch64) PLATFORM=darwin-arm64 ;;
+  Darwin/x86_64|Darwin/amd64) PLATFORM=darwin-x64 ;;
+  Linux/aarch64|Linux/arm64) PLATFORM=linux-arm64 ;;
+  Linux/x86_64|Linux/amd64) PLATFORM=linux-x64 ;;
+  MINGW*/*arm64|MINGW*/*aarch64|MSYS*/*arm64|MSYS*/*aarch64|CYGWIN*/*arm64|CYGWIN*/*aarch64) PLATFORM=windows-arm64 ;;
+  MINGW*/*x86_64|MINGW*/*amd64|MSYS*/*x86_64|MSYS*/*amd64|CYGWIN*/*x86_64|CYGWIN*/*amd64) PLATFORM=windows-x64 ;;
+  *) error E_UNSUPPORTED_PLATFORM "当前操作系统或 CPU 架构不受支持" ;;
+esac
+
+[ -f "$MANIFEST" ] || error E_RUNTIME_CACHE "运行时制品清单缺失"
+ARTIFACT_LINE=$(tr -d '\r\n\t ' < "$MANIFEST" | awk -v platform="$PLATFORM" 'BEGIN { RS="}" } index($0, "\"platform\":\"" platform "\"") { print $0 "}"; exit }')
+[ -n "$ARTIFACT_LINE" ] || error E_UNSUPPORTED_PLATFORM "运行时制品清单不包含当前平台"
+
+json_field() { printf '%s\n' "$ARTIFACT_LINE" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
+json_number() { printf '%s\n' "$ARTIFACT_LINE" | sed -n "s/.*\"$1\":\([0-9][0-9]*\).*/\1/p"; }
+
+VERSION=$(json_field version)
+URL=$(json_field url)
+EXPECTED_SHA=$(json_field sha256)
+EXPECTED_BYTES=$(json_number bytes)
+FILENAME=$(json_field filename)
+[ -n "$VERSION" ] && [ -n "$EXPECTED_SHA" ] && [ -n "$EXPECTED_BYTES" ] && [ -n "$FILENAME" ] || error E_RUNTIME_CACHE "运行时制品清单字段不完整"
+case "$EXPECTED_SHA" in *[!0-9a-f]*|'') error E_RUNTIME_CACHE "运行时制品哈希格式无效" ;; esac
+[ "${#EXPECTED_SHA}" -eq 64 ] || error E_RUNTIME_CACHE "运行时制品哈希长度无效"
+case "$EXPECTED_BYTES" in *[!0-9]*|'') error E_RUNTIME_CACHE "运行时制品字节数格式无效" ;; esac
+[ "$EXPECTED_BYTES" -gt 0 ] || error E_RUNTIME_CACHE "运行时制品字节数必须大于零"
+case "$FILENAME" in */*|*\\*|.|..) error E_RUNTIME_CACHE "运行时制品文件名无效" ;; esac
+
+sha256_file() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else error E_RUNTIME_DEPENDENCY "缺少 SHA-256 校验工具（shasum 或 sha256sum）"; fi
+}
+
+file_valid() {
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  actual_bytes=$(wc -c < "$1" | tr -d '[:space:]')
+  [ "$actual_bytes" = "$EXPECTED_BYTES" ] || return 1
+  actual_sha=$(sha256_file "$1")
+  [ "$actual_sha" = "$EXPECTED_SHA" ] || return 1
+}
+
+BUNDLED="$ROOT_DIR/bin/$FILENAME"
+if [ -e "$BUNDLED" ]; then
+  file_valid "$BUNDLED" || error E_RUNTIME_INTEGRITY "包内 zspace-cli 完整性校验失败"
+  [ -x "$BUNDLED" ] || chmod 755 "$BUNDLED" 2>/dev/null || error E_RUNTIME_CACHE "包内 zspace-cli 不可执行"
+  exec "$BUNDLED" "$@"
+fi
+
+if [ "$ALLOW_HTTP" = 1 ] && [ -n "${ZSPACE_RUNTIME_CACHE_DIR:-}" ]; then CACHE_DIR=$ZSPACE_RUNTIME_CACHE_DIR
+elif [ "$PLATFORM" = windows-x64 ] || [ "$PLATFORM" = windows-arm64 ]; then
+  [ -n "${LOCALAPPDATA:-}" ] || error E_RUNTIME_CACHE "LOCALAPPDATA is unavailable"
+  if command -v cygpath >/dev/null 2>&1; then WINDOWS_CACHE_ROOT=$(cygpath -u "$LOCALAPPDATA")
+  else WINDOWS_CACHE_ROOT=$LOCALAPPDATA; fi
+  CACHE_DIR="$WINDOWS_CACHE_ROOT/ZSpace/AgentToolkit/cache/$VERSION/$PLATFORM"
+elif [ "$OS" = Darwin ]; then CACHE_DIR=${HOME:?}/Library/Caches/zspace-nas-agent-toolkit/$VERSION/$PLATFORM
+else CACHE_DIR=${XDG_CACHE_HOME:-${HOME:?}/.cache}/zspace-nas-agent-toolkit/$VERSION/$PLATFORM; fi
+case "$CACHE_DIR" in ''|/) error E_RUNTIME_CACHE "运行时缓存目录无效" ;; esac
+[ ! -L "$CACHE_DIR" ] || error E_RUNTIME_CACHE "运行时缓存目录不能是符号链接"
+umask 077
+mkdir -p "$CACHE_DIR" 2>/dev/null || error E_RUNTIME_CACHE "无法创建运行时缓存目录"
+[ -d "$CACHE_DIR" ] && [ ! -L "$CACHE_DIR" ] || error E_RUNTIME_CACHE "运行时缓存目录无效"
+
+CACHED="$CACHE_DIR/$FILENAME"
+if file_valid "$CACHED"; then chmod 755 "$CACHED" 2>/dev/null || error E_RUNTIME_CACHE "缓存的 zspace-cli 不可执行"; exec "$CACHED" "$@"; fi
+if [ -e "$CACHED" ] || [ -L "$CACHED" ]; then rm -f -- "$CACHED" 2>/dev/null || error E_RUNTIME_CACHE "无法移除损坏的运行时缓存"; fi
+
+case "$URL" in
+  https://update.zenithspace.net/*) ;;
+  http://127.0.0.1:*|http://localhost:*) [ "$ALLOW_HTTP" = 1 ] || error E_RUNTIME_DOWNLOAD "生产运行时制品必须使用 HTTPS" ;;
+  '') error E_RUNTIME_DOWNLOAD "当前版本的 CDN 运行时制品尚未发布；请使用 offline 包" ;;
+  *) error E_RUNTIME_DOWNLOAD "运行时制品 URL 必须使用受信任的 HTTPS CDN" ;;
+esac
+
+TMP=$(mktemp "$CACHE_DIR/.zspace-cli.download.XXXXXX") || error E_RUNTIME_CACHE "无法创建运行时临时文件"
+cleanup() { [ -z "${TMP:-}" ] || rm -f -- "$TMP" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM HUP
+BLOCKS=$(( (EXPECTED_BYTES + 1023) / 512 + 2 ))
+if command -v curl >/dev/null 2>&1; then
+  if [ "$ALLOW_HTTP" = 1 ]; then PROTO='=http,https'; else PROTO='=https'; fi
+  HTTP_CODE=$(ulimit -f "$BLOCKS" 2>/dev/null || true; curl --fail --silent --show-error --proto "$PROTO" --max-redirs 0 --connect-timeout 15 --max-time 300 --output "$TMP" --write-out '%{http_code}' "$URL") || error E_RUNTIME_DOWNLOAD "下载 zspace-cli 失败"
+  [ "$HTTP_CODE" = 200 ] || error E_RUNTIME_DOWNLOAD "下载 zspace-cli 失败或发生重定向"
+elif command -v wget >/dev/null 2>&1; then
+  (ulimit -f "$BLOCKS" 2>/dev/null || true; wget --quiet --timeout=300 --max-redirect=0 --output-document="$TMP" "$URL") || error E_RUNTIME_DOWNLOAD "下载 zspace-cli 失败"
+else error E_RUNTIME_DEPENDENCY "缺少 HTTPS 下载工具（curl 或 wget）"; fi
+
+file_valid "$TMP" || error E_RUNTIME_INTEGRITY "下载的 zspace-cli 大小或 SHA-256 不匹配"
+chmod 755 "$TMP" 2>/dev/null || error E_RUNTIME_CACHE "无法设置 zspace-cli 执行权限"
+if mv -f -- "$TMP" "$CACHED" 2>/dev/null; then TMP=''; else file_valid "$CACHED" || error E_RUNTIME_CACHE "无法原子安装 zspace-cli"; fi
+trap - EXIT INT TERM HUP
+file_valid "$CACHED" || error E_RUNTIME_INTEGRITY "安装后的 zspace-cli 完整性校验失败"
+exec "$CACHED" "$@"

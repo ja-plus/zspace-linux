@@ -1,0 +1,23 @@
+{
+  "audit_date": "2026-10-19",
+  "database_source": "https://github.com/RustSec/advisory-db",
+  "database_revision": "999ec89",
+  "database_archive_sha256": "7abcac1eedbda096e183a5d57673e7efc310d74b5daa3e77cbc3591ac6069624",
+  "lockfile_sha256": "e85af49221cb733f21ded7ced78519e6beef56085291a0a5db9451c57d24ddff",
+  "registry_package_count": 234,
+  "relevant_advisory_version_pairs": 86,
+  "findings": [{
+    "package": "rsa",
+    "version": "0.9.10",
+    "advisory": "RUSTSEC-2023-0071",
+    "informational": null,
+    "title": "# Marvin Attack: potential key recovery through timing sidechannels",
+    "patched": [],
+    "url": "https://github.com/RustCrypto/RSA/issues/626",
+    "source_file": "RUSTSEC-2023-0071.md"
+  }],
+  "unresolved_ranges": [],
+  "limitations": "Local RustSec version-range comparison; not cargo-audit, no feature/reachability analysis, no binary SBOM verification. Advisory data was not refreshed for this packaging pass.",
+  "version": "0.2.5",
+  "dependency_set_verification": "Dependency versions match 0.2.4 after only the toolkit package version changed; the 2026-10-19 advisory snapshot was retained, not freshly downloaded"
+}

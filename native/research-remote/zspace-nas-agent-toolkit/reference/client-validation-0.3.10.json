@@ -1,0 +1,9 @@
+{
+  "version": "0.3.10",
+  "validation_date": "2026-10-23",
+  "scope": "0.3.9 report login timeout and runtime temporary cleanup",
+  "windows_native": "pending: timeout and failure cleanup regression",
+  "large_file_download": "unresolved; safe range diagnostics added",
+  "server_changed": false,
+  "real_credentials_used": false
+}

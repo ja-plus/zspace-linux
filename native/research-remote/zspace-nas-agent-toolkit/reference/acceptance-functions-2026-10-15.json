@@ -1,0 +1,1937 @@
+{
+  "date": "2026-10-15 Asia/Shanghai",
+  "status": "partial functional expansion; not a release or security remediation",
+  "unit_tests": 120,
+  "cli_contract_tests": 2,
+  "ssh_architecture": "x86_64",
+  "oauth": "temporary isolated file profile; no secrets recorded",
+  "read_checks": [
+    {
+      "command": [
+        "app",
+        "list"
+      ],
+      "exit": 0,
+      "keys": [
+        "count",
+        "full_success",
+        "list",
+        "partial",
+        "sources"
+      ],
+      "count": 70,
+      "partial": false,
+      "sources": {
+        "appstore": {
+          "count": 55,
+          "ok": true
+        },
+        "docker": {
+          "count": 15,
+          "ok": true
+        }
+      }
+    },
+    {
+      "command": [
+        "file",
+        "space"
+      ],
+      "exit": 0,
+      "keys": [
+        "device_dirs",
+        "home",
+        "note",
+        "personal_spaces"
+      ],
+      "personal_spaces_count": 1
+    },
+    {
+      "command": [
+        "app",
+        "manage",
+        "--params",
+        "{\"action\":\"tasks\",\"source\":\"appstore\"}"
+      ],
+      "exit": 0,
+      "keys": "list"
+    },
+    {
+      "command": [
+        "app",
+        "manage",
+        "--params",
+        "{\"action\":\"tasks\",\"source\":\"docker\"}"
+      ],
+      "exit": 1,
+      "keys": [],
+      "error": "E_API",
+      "phase": "before_user_docker_initialization",
+      "superseded_by": "docker_reads"
+    }
+  ],
+  "archive_note_checks": [
+    {
+      "test": "write_fixture",
+      "ok": true
+    },
+    {
+      "test": "compress_terminal",
+      "ok": true
+    },
+    {
+      "test": "archive_browse",
+      "ok": true
+    },
+    {
+      "test": "extract_terminal",
+      "ok": true
+    },
+    {
+      "test": "extracted_content",
+      "ok": true
+    },
+    {
+      "test": "note_class_create",
+      "ok": true
+    },
+    {
+      "test": "note_create",
+      "ok": true
+    },
+    {
+      "test": "note_info",
+      "ok": true
+    },
+    {
+      "test": "note_update",
+      "ok": true
+    },
+    {
+      "test": "note_history",
+      "ok": true
+    },
+    {
+      "test": "note_search",
+      "ok": true
+    },
+    {
+      "test": "note_pin_0",
+      "ok": true
+    },
+    {
+      "test": "note_pin_1",
+      "ok": true
+    },
+    {
+      "test": "docker_app_tasks",
+      "ok": false,
+      "reason": "E_API",
+      "phase": "before_user_docker_initialization",
+      "superseded_by": "docker_reads"
+    },
+    {
+      "test": "cleanup_note",
+      "ok": true
+    },
+    {
+      "test": "cleanup_class",
+      "ok": true
+    },
+    {
+      "test": "cleanup_folder_to_recyclebin",
+      "ok": true
+    }
+  ],
+  "collection_label_checks": [
+    {
+      "test": "collect_create",
+      "ok": true
+    },
+    {
+      "test": "collect_info",
+      "ok": true
+    },
+    {
+      "test": "collect_files",
+      "ok": true
+    },
+    {
+      "test": "collect_stop",
+      "ok": true
+    },
+    {
+      "test": "label_create",
+      "ok": true
+    },
+    {
+      "test": "label_create",
+      "ok": true
+    },
+    {
+      "test": "label_multi_assign",
+      "ok": true
+    },
+    {
+      "test": "label_files",
+      "ok": true
+    },
+    {
+      "test": "label_rename",
+      "ok": true
+    },
+    {
+      "test": "label_rename_status",
+      "ok": true
+    },
+    {
+      "test": "cloud_app_discovery",
+      "ok": true
+    },
+    {
+      "test": "cleanup_collection",
+      "ok": true
+    },
+    {
+      "test": "cleanup_label",
+      "ok": true
+    },
+    {
+      "test": "cleanup_label",
+      "ok": true
+    },
+    {
+      "test": "cleanup_label",
+      "ok": true
+    },
+    {
+      "test": "cleanup_collect_folder",
+      "ok": true
+    }
+  ],
+  "docker_readiness": {
+    "ok": true,
+    "note": "initial data-directory error resolved by user initialization; subsequent live lifecycle passed"
+  },
+  "limitations": [
+    "Six-platform binaries and ZIP are unchanged",
+    "Engine reset/upgrade and global IPv6 mutation not live tested",
+    "Complete product scope remains in progress; security remediation deferred",
+    "Safe box writes require a dedicated test account",
+    "No live user share recipients or external disk writes tested",
+    "Snapshot init/restore/schedule/retention not live mutated",
+    "Notes purge is a logical backend flag, not guaranteed physical erasure"
+  ],
+  "logout_verified": false,
+  "docker_reads": [
+    {
+      "test": "system_status",
+      "ok": true,
+      "shape": "dict",
+      "fields": [
+        "status"
+      ],
+      "count": null
+    },
+    {
+      "test": "system_storage",
+      "ok": true,
+      "shape": "dict",
+      "fields": [
+        "data",
+        "error"
+      ],
+      "count": null
+    },
+    {
+      "test": "system_disks",
+      "ok": true,
+      "shape": "dict",
+      "fields": [
+        "/data_s001",
+        "/data_s002",
+        "/data_s003",
+        "/data_s004"
+      ],
+      "count": null
+    },
+    {
+      "test": "images_list",
+      "ok": true,
+      "shape": "NoneType",
+      "fields": null,
+      "count": null
+    },
+    {
+      "test": "containers_list",
+      "ok": true,
+      "shape": "NoneType",
+      "fields": null,
+      "count": null
+    },
+    {
+      "test": "compose_list",
+      "ok": true,
+      "shape": "NoneType",
+      "fields": null,
+      "count": null
+    },
+    {
+      "test": "docker_store_tasks_initialized",
+      "ok": true
+    }
+  ],
+  "docker_pull": {
+    "test": "pull_dedicated_busybox_image",
+    "ok": true,
+    "status": "===Pull Completed==="
+  },
+  "docker_compose": [
+    {
+      "test": "compose_create",
+      "ok": true
+    },
+    {
+      "test": "compose_task_terminal",
+      "ok": true
+    },
+    {
+      "test": "compose_list",
+      "ok": true
+    },
+    {
+      "test": "compose_containers",
+      "ok": true
+    },
+    {
+      "test": "compose_read_yaml",
+      "ok": true
+    },
+    {
+      "test": "compose_save_raw_yaml",
+      "ok": true
+    },
+    {
+      "test": "compose_raw_yaml_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "compose_logs",
+      "ok": true
+    },
+    {
+      "test": "compose_stop",
+      "ok": true
+    },
+    {
+      "test": "compose_start",
+      "ok": true
+    },
+    {
+      "test": "compose_restart",
+      "ok": true
+    },
+    {
+      "test": "compose_rebuild_task",
+      "ok": true
+    },
+    {
+      "test": "cleanup_compose_project",
+      "ok": true
+    },
+    {
+      "test": "cleanup_compose_fixture_directory",
+      "ok": true
+    }
+  ],
+  "docker_app_installation": [
+    {
+      "test": "app_install_dependency_probe",
+      "ok": true,
+      "sys_version_required": false,
+      "app_version_required": false,
+      "required_app_count": 0
+    },
+    {
+      "test": "docker_app_install_submit",
+      "ok": true
+    },
+    {
+      "test": "docker_app_install_terminal",
+      "ok": true
+    },
+    {
+      "test": "docker_app_installed_state",
+      "ok": true
+    },
+    {
+      "test": "docker_app_stop",
+      "ok": true
+    },
+    {
+      "test": "docker_app_start",
+      "ok": true
+    },
+    {
+      "test": "docker_app_restart",
+      "ok": true
+    },
+    {
+      "test": "cancel_owned_app_task",
+      "ok": true
+    },
+    {
+      "test": "check_owned_app_state",
+      "ok": true
+    },
+    {
+      "test": "docker_app_uninstall_submit",
+      "ok": true
+    },
+    {
+      "test": "docker_app_uninstall_terminal",
+      "ok": true
+    },
+    {
+      "test": "cleanup_owned_app_task",
+      "ok": true
+    },
+    {
+      "test": "app_final_uninstalled_state",
+      "ok": true
+    },
+    {
+      "test": "cleanup_owned_preinstall_package",
+      "ok": true
+    },
+    {
+      "test": "cleanup_owned_workspace",
+      "ok": true
+    }
+  ],
+  "docker_cleanup": [
+    {
+      "test": "docker_no_containers_or_projects",
+      "ok": true
+    },
+    {
+      "test": "docker_test_images_absent",
+      "ok": true
+    },
+    {
+      "test": "owned_note_absent_from_normal_search",
+      "ok": true
+    }
+  ],
+  "public_space": [
+    {
+      "test": "public_current_permission",
+      "ok": true
+    },
+    {
+      "test": "public_group_list",
+      "ok": true
+    },
+    {
+      "test": "public_group_create",
+      "ok": true
+    },
+    {
+      "test": "public_group_info",
+      "ok": true
+    },
+    {
+      "test": "public_group_permissions",
+      "ok": true
+    },
+    {
+      "test": "public_set_owned_group_no_access",
+      "ok": true
+    },
+    {
+      "test": "public_permission_readback",
+      "ok": true
+    },
+    {
+      "test": "public_restore_owned_group_permission",
+      "ok": true
+    },
+    {
+      "test": "public_user_groups",
+      "ok": true
+    },
+    {
+      "test": "public_quotas",
+      "ok": true
+    },
+    {
+      "test": "cleanup_owned_public_group",
+      "ok": true
+    },
+    {
+      "test": "owned_public_group_absent",
+      "ok": true
+    }
+  ],
+  "archive_followup": [
+    {
+      "test": "encrypted_archive_create",
+      "ok": true
+    },
+    {
+      "test": "archive_password_continue",
+      "ok": true
+    },
+    {
+      "test": "password_resume_content_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "recursive_extract_content_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "cleanup_archive_followup",
+      "ok": true
+    }
+  ],
+  "file_metadata": [
+    {
+      "test": "file_simple_hash_matches_source_algorithm",
+      "ok": true
+    },
+    {
+      "test": "file_note_set_and_clear_readback",
+      "ok": true
+    },
+    {
+      "test": "personal_directory_pin_unpin_readback",
+      "ok": true
+    },
+    {
+      "test": "cleanup_metadata_fixture",
+      "ok": true
+    }
+  ],
+  "file_history": [
+    {
+      "test": "recent_visit_and_list",
+      "ok": true
+    },
+    {
+      "test": "recent_extension_filter",
+      "ok": true
+    },
+    {
+      "test": "latest_list_read",
+      "ok": true
+    },
+    {
+      "test": "selected_recent_remove_readback",
+      "ok": true
+    },
+    {
+      "test": "cleanup_history_fixture",
+      "ok": true
+    }
+  ],
+  "checks": {
+    "fmt": true,
+    "clippy_all_targets_warnings_denied": true,
+    "git_diff_check": true
+  },
+  "snapshot_read": [
+    {
+      "test": "snapshot_task_status",
+      "ok": true,
+      "init": 0,
+      "pool_count": 1
+    },
+    {
+      "test": "snapshot_pool_list",
+      "ok": true,
+      "snapshot_count": 0
+    }
+  ],
+  "snapshot_write": [
+    {
+      "test": "snapshot_create_readback",
+      "ok": true
+    },
+    {
+      "test": "snapshot_edit_fixed_readback",
+      "ok": true
+    },
+    {
+      "test": "fixed_snapshot_delete_requires_force",
+      "ok": true
+    },
+    {
+      "test": "cleanup_owned_snapshot",
+      "ok": true
+    }
+  ],
+  "safe_read": [
+    {
+      "test": "safe_status",
+      "ok": true,
+      "status": 1,
+      "keys": [
+        "pool",
+        "status",
+        "task_id"
+      ]
+    },
+    {
+      "test": "safe_backup_status",
+      "ok": true,
+      "status": null,
+      "keys": [
+        "double_write_status",
+        "double_write_time",
+        "fail_reason",
+        "next_exec_time",
+        "period"
+      ]
+    }
+  ],
+  "encrypted_directory": [
+    {
+      "test": "encrypted_dir_create_readback",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_lock_readback",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_unlock_readback",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_icon_readback",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_old_password_rejected",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_new_password_unlock",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_rename_readback",
+      "ok": true
+    },
+    {
+      "test": "encrypted_dir_release_preserves_content",
+      "ok": true
+    },
+    {
+      "test": "cleanup_encrypted_dir_fixture",
+      "ok": true
+    }
+  ],
+  "file_links": [
+    {
+      "test": "file_share_create_type2_readback",
+      "ok": true
+    },
+    {
+      "test": "file_share_expiration_readback",
+      "ok": true
+    },
+    {
+      "test": "file_share_cancel_enable_readback",
+      "ok": true
+    },
+    {
+      "test": "file_share_statics",
+      "ok": true
+    },
+    {
+      "test": "cleanup_owned_share_record",
+      "ok": true
+    },
+    {
+      "test": "cleanup_share_fixture",
+      "ok": true
+    }
+  ],
+  "read_additions": [
+    {
+      "test": "shared_incoming",
+      "ok": true,
+      "keys": [
+        "list",
+        "total"
+      ]
+    },
+    {
+      "test": "shared_mine",
+      "ok": true,
+      "keys": []
+    },
+    {
+      "test": "devices_list",
+      "ok": true,
+      "keys": [
+        "esp_ver"
+      ]
+    },
+    {
+      "test": "devices_details",
+      "ok": true,
+      "keys": []
+    }
+  ],
+  "note_exports": [
+    {
+      "test": "note_export_txt_content",
+      "ok": true
+    },
+    {
+      "test": "note_export_docx_content",
+      "ok": true
+    },
+    {
+      "test": "note_export_no_implicit_overwrite",
+      "ok": true
+    },
+    {
+      "test": "cleanup_export_note_to_note_recycle",
+      "ok": true
+    }
+  ],
+  "note_attachments": [
+    {
+      "test": "note_attachment_upload",
+      "ok": true
+    },
+    {
+      "test": "note_attachment_binary_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "note_attachment_reference_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "cleanup_attachment_note_to_note_recycle",
+      "ok": true
+    }
+  ],
+  "note_recycle": [
+    {
+      "test": "note_trash_list_contains_deleted_note",
+      "ok": true
+    },
+    {
+      "test": "note_restore_readback",
+      "ok": true
+    },
+    {
+      "test": "note_purge_absent_from_active_and_trash",
+      "ok": true
+    },
+    {
+      "test": "cleanup_recorded_test_note",
+      "ok": true
+    },
+    {
+      "test": "cleanup_recorded_test_note",
+      "ok": true
+    },
+    {
+      "test": "cleanup_recorded_test_note",
+      "ok": true
+    }
+  ],
+  "docker_containers_networks": [
+    {
+      "test": "network_create",
+      "ok": true
+    },
+    {
+      "test": "container_create",
+      "ok": true
+    },
+    {
+      "test": "container_start",
+      "ok": true
+    },
+    {
+      "test": "container_info",
+      "ok": true
+    },
+    {
+      "test": "container_top",
+      "ok": true
+    },
+    {
+      "test": "container_logs",
+      "ok": true
+    },
+    {
+      "test": "container_pause",
+      "ok": true
+    },
+    {
+      "test": "container_resume",
+      "ok": true
+    },
+    {
+      "test": "network_info",
+      "ok": true
+    },
+    {
+      "test": "network_attach",
+      "ok": true
+    },
+    {
+      "test": "network_detach",
+      "ok": true
+    },
+    {
+      "test": "container_rename_empty_response",
+      "ok": true
+    },
+    {
+      "test": "container_stop",
+      "ok": true
+    },
+    {
+      "test": "cleanup_container",
+      "ok": true
+    },
+    {
+      "test": "cleanup_network",
+      "ok": true
+    }
+  ],
+  "safe_box_initialization": [
+    {
+      "test": "safe_init_current_account",
+      "ok": true,
+      "status": 2
+    },
+    {
+      "test": "safe_open_readback",
+      "ok": true
+    },
+    {
+      "test": "safe_root_list",
+      "ok": true
+    },
+    {
+      "test": "safe_note_create_readback",
+      "ok": true
+    },
+    {
+      "test": "safe_note_cleanup",
+      "ok": true
+    },
+    {
+      "test": "safe_left_locked",
+      "ok": true,
+      "status": 2
+    }
+  ],
+  "dynamic_application_status": [
+    {
+      "test": "dynamic_names",
+      "ok": true,
+      "count": 70,
+      "partial": false,
+      "source_counts": {
+        "appstore": 55,
+        "docker": 15
+      },
+      "failed_status_count": 0
+    },
+    {
+      "test": "dynamic_all_status",
+      "ok": true,
+      "count": 70,
+      "partial": false,
+      "source_counts": {
+        "appstore": 55,
+        "docker": 15
+      },
+      "failed_status_count": 0
+    },
+    {
+      "test": "docker_single_status",
+      "ok": true
+    }
+  ],
+  "account_read": [
+    {
+      "test": "account_list",
+      "ok": true,
+      "count": 2,
+      "users_with_storage_permissions": 2
+    },
+    {
+      "test": "account_storage_quotas",
+      "ok": true,
+      "count": 2,
+      "users_with_storage_permissions": 2
+    }
+  ],
+  "network_read": [
+    {
+      "test": "ddns_list",
+      "ok": true,
+      "keys": [
+        "list"
+      ]
+    },
+    {
+      "test": "network_info",
+      "ok": true,
+      "keys": [
+        "build_id",
+        "nas_type",
+        "version"
+      ]
+    },
+    {
+      "test": "network_mode",
+      "ok": true,
+      "keys": [
+        "mode"
+      ]
+    },
+    {
+      "test": "network_interfaces",
+      "ok": true,
+      "keys": [
+        "list"
+      ]
+    },
+    {
+      "test": "network_bonds",
+      "ok": true,
+      "keys": [
+        "list"
+      ]
+    },
+    {
+      "test": "network_bridges",
+      "ok": false,
+      "reason": "E_API"
+    },
+    {
+      "test": "network_wireless",
+      "ok": true,
+      "keys": [
+        "list"
+      ]
+    },
+    {
+      "test": "network_wireless_advanced",
+      "ok": false,
+      "reason": "E_API"
+    },
+    {
+      "test": "network_wireless_config",
+      "ok": false,
+      "reason": "E_API"
+    },
+    {
+      "test": "network_hardware",
+      "ok": true,
+      "keys": [
+        "advanced"
+      ]
+    },
+    {
+      "test": "network_ipv6_monitor",
+      "ok": true,
+      "keys": [
+        "enabled"
+      ]
+    }
+  ],
+  "safe_box_final_state": "initialized and locked; private PIN handoff retained outside repository",
+  "client_source_sync_reads": [
+    {
+      "test": "network_bridges",
+      "ok": true,
+      "keys": [
+        "list"
+      ],
+      "count": null
+    },
+    {
+      "test": "sync_status",
+      "ok": true,
+      "keys": [
+        "alloc",
+        "connectionServiceStatus",
+        "cpuPercent",
+        "goroutines",
+        "guiAddressOverridden",
+        "guiAddressUsed",
+        "lastDialStatus",
+        "myID",
+        "pathSeparator",
+        "startTime",
+        "sys",
+        "tilde",
+        "uptime",
+        "urVersionMax"
+      ],
+      "count": null
+    },
+    {
+      "test": "sync_folders",
+      "ok": true,
+      "keys": [
+        "count",
+        "list"
+      ],
+      "count": 0
+    },
+    {
+      "test": "sync_devices",
+      "ok": true,
+      "keys": [
+        "count",
+        "list"
+      ],
+      "count": 1
+    },
+    {
+      "test": "sync_connections",
+      "ok": true,
+      "keys": [
+        "connections",
+        "total"
+      ],
+      "count": null
+    },
+    {
+      "test": "sync_device_stats",
+      "ok": true,
+      "count": null,
+      "device_count": 1
+    },
+    {
+      "test": "sync_config_sync",
+      "ok": true,
+      "keys": [
+        "configInSync"
+      ],
+      "count": null
+    }
+  ],
+  "syncthing_nas_lifecycle": [
+    {
+      "test": "sync_nas_only_create_paused_readback",
+      "ok": true
+    },
+    {
+      "test": "sync_resume_readback",
+      "ok": true
+    },
+    {
+      "test": "sync_ignore_write_readback",
+      "ok": true
+    },
+    {
+      "test": "sync_scan_submitted",
+      "ok": true
+    },
+    {
+      "test": "sync_folder_status",
+      "ok": true
+    },
+    {
+      "test": "sync_need",
+      "ok": true
+    },
+    {
+      "test": "sync_errors",
+      "ok": true
+    },
+    {
+      "test": "sync_pause_readback",
+      "ok": true
+    },
+    {
+      "test": "sync_delete_config_preserves_files",
+      "ok": true
+    },
+    {
+      "test": "cleanup_sync_fixture_directory",
+      "ok": true
+    }
+  ],
+  "certificate_read": [
+    {
+      "test": "certificate_list",
+      "ok": true,
+      "count": 1,
+      "credential_values_absent": true
+    }
+  ],
+  "certificate_lifecycle": [
+    {
+      "test": "certificate_upload_inactive_readback",
+      "ok": true
+    },
+    {
+      "test": "certificate_export_private_key_roundtrip_mode600",
+      "ok": true
+    },
+    {
+      "test": "certificate_backup_files_exist",
+      "ok": true
+    },
+    {
+      "test": "certificate_delete_inactive_readback",
+      "ok": true
+    },
+    {
+      "test": "cleanup_certificate_backup",
+      "ok": true
+    }
+  ],
+  "syncthing_service": "user installed and started 文档同步; no extra backend source required",
+  "downloader_read": [
+    {
+      "test": "downloader_get",
+      "ok": true,
+      "keys": [
+        "bt_engine_type",
+        "bt_engine_type_list",
+        "db_store_name_v3",
+        "db_store_type",
+        "dht_enable",
+        "download_dir",
+        "download_queue_size",
+        "lpd_enabled",
+        "peer_limit_global_max",
+        "peer_limit_torrent_max",
+        "peer_port",
+        "pex_enabled",
+        "pools_name_v3",
+        "pools_type",
+        "seed_ratio_limit",
+        "seed_ratio_limit_enable",
+        "seed_time_limit",
+        "seed_time_limit_enable",
+        "speed_limit_down",
+        "speed_limit_down_enable",
+        "speed_limit_up",
+        "speed_limit_up_enable",
+        "torrent_watch_dir",
+        "trackers"
+      ]
+    },
+    {
+      "test": "downloader_basic",
+      "ok": true,
+      "keys": [
+        "bt_engine_type",
+        "bt_engine_type_list",
+        "db_store_name_v3",
+        "download_dir",
+        "download_queue_size",
+        "pools_name_v3",
+        "torrent_watch_dir"
+      ]
+    },
+    {
+      "test": "downloader_protocols",
+      "ok": true,
+      "keys": "str"
+    },
+    {
+      "test": "downloader_details",
+      "ok": true,
+      "keys": [
+        "download_queue_size",
+        "loading_queue_size"
+      ]
+    },
+    {
+      "test": "downloader_directories",
+      "ok": true,
+      "keys": [
+        "list",
+        "total"
+      ]
+    },
+    {
+      "test": "downloader_engine_status",
+      "ok": true,
+      "keys": [
+        "status"
+      ]
+    }
+  ],
+  "torrent_lifecycle": [
+    {
+      "test": "torrent_local_multipart_parse_hash",
+      "ok": true
+    },
+    {
+      "test": "torrent_parse_cancel",
+      "ok": true
+    },
+    {
+      "test": "torrent_nas_parse_hash",
+      "ok": true
+    },
+    {
+      "test": "torrent_effect_task_exact_hash",
+      "ok": true
+    },
+    {
+      "test": "torrent_files",
+      "ok": true
+    },
+    {
+      "test": "torrent_peers",
+      "ok": true
+    },
+    {
+      "test": "torrent_trackers",
+      "ok": true
+    },
+    {
+      "test": "torrent_task_upload_limit_readback",
+      "ok": true
+    },
+    {
+      "test": "torrent_file_priority_set",
+      "ok": true
+    },
+    {
+      "test": "torrent_pin_unpin_verify",
+      "ok": true
+    },
+    {
+      "test": "torrent_delete_preserves_file",
+      "ok": true
+    },
+    {
+      "test": "cleanup_torrent_directory",
+      "ok": true
+    }
+  ],
+  "torrent_busy_recovery": [
+    {
+      "test": "cleanup_busy_owned_torrent_task",
+      "ok": true,
+      "absent": true
+    }
+  ],
+  "events_read": [
+    {
+      "test": "events_list",
+      "ok": true,
+      "count": 5,
+      "reason": null
+    },
+    {
+      "test": "events_login_log",
+      "ok": true,
+      "count": 5,
+      "reason": null
+    }
+  ],
+  "system_settings": [
+    {
+      "test": "system_settings_get",
+      "ok": true,
+      "keys": [
+        "boot",
+        "desktop",
+        "disk_stats_sec",
+        "file",
+        "fs_evt_monitor",
+        "wall_papers"
+      ]
+    },
+    {
+      "test": "system_settings_timezones",
+      "ok": true,
+      "keys": [
+        "current",
+        "list"
+      ]
+    },
+    {
+      "test": "system_settings_power_plans",
+      "ok": true,
+      "keys": [
+        "settings"
+      ]
+    },
+    {
+      "test": "system_personal_show_hidden_write_readback",
+      "ok": true
+    },
+    {
+      "test": "system_personal_preference_restored",
+      "ok": true
+    }
+  ],
+  "storage_maintenance_read": [
+    {
+      "test": "storage_info",
+      "ok": true,
+      "keys": [
+        "cache_list",
+        "esp_ver",
+        "ext_mnt_list",
+        "free_list",
+        "pool_list"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_hardware",
+      "ok": true,
+      "keys": [
+        "slot"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_polling",
+      "ok": true,
+      "keys": [
+        "dev",
+        "sys_pools"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_capability",
+      "ok": true,
+      "keys": [
+        "encrypted_pool"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_smart_status",
+      "ok": true,
+      "keys": [
+        "status"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_smart_schedule",
+      "ok": true,
+      "keys": [
+        "days",
+        "hour",
+        "min"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_ihm_status",
+      "ok": true,
+      "keys": [
+        "status"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_balance_analyze_status",
+      "ok": true,
+      "keys": [
+        "running"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_balance_status",
+      "ok": true,
+      "keys": [
+        "fragment_list",
+        "status"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_scrub_status",
+      "ok": true,
+      "keys": [
+        "status"
+      ],
+      "reason": null
+    },
+    {
+      "test": "storage_cache_hits",
+      "ok": false,
+      "keys": "NoneType",
+      "reason": "E_API"
+    }
+  ],
+  "backup_center_local_lifecycle": [
+    {
+      "test": "backup_center_count",
+      "ok": true,
+      "keys": [
+        "from_zspace_task_count",
+        "storagepool_bak_task_count",
+        "to_zspace_task_count"
+      ]
+    },
+    {
+      "test": "backup_center_list",
+      "ok": true,
+      "keys": [
+        "list",
+        "total"
+      ]
+    },
+    {
+      "test": "backup_local_create_manual_readback",
+      "ok": true
+    },
+    {
+      "test": "backup_local_update_readback",
+      "ok": true
+    },
+    {
+      "test": "backup_local_execution_success",
+      "ok": true
+    },
+    {
+      "test": "backup_local_content_roundtrip",
+      "ok": true
+    },
+    {
+      "test": "backup_local_failure_list",
+      "ok": true
+    },
+    {
+      "test": "backup_local_plan_disable_enable_readback",
+      "ok": true
+    },
+    {
+      "test": "backup_task_delete_preserves_output",
+      "ok": true
+    },
+    {
+      "test": "cleanup_backup_directory",
+      "ok": true
+    }
+  ],
+  "storage_maintenance_note": "cache_hits unavailable because pool has no cache; source N300121 maps to E_NOT_FOUND; no disk workload started",
+  "cloud_provider_checks": [
+    {
+      "provider": "aliyun",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "baidu",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "onedrive",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "tianyi",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "yun115",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": false
+    },
+    {
+      "provider": "yun123",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "yun139",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "kuake",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "gdrive",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    },
+    {
+      "provider": "dropbox",
+      "test": "cloud_check",
+      "ok": true,
+      "is_login": false,
+      "authorization_url_available": true
+    }
+  ],
+  "quark_acceptance": [
+    {
+      "test": "login_check_default_redirect",
+      "ok": true
+    },
+    {
+      "test": "upload_directory_complete_49_bytes",
+      "ok": true
+    },
+    {
+      "test": "cloud_exact_folder_and_file",
+      "ok": true
+    },
+    {
+      "test": "download_directory_complete",
+      "ok": true
+    },
+    {
+      "test": "download_content_exact",
+      "ok": true
+    },
+    {
+      "test": "owned_tasks_delete_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    },
+    {
+      "test": "cloud_fixture_cleanup_verified",
+      "ok": true,
+      "method": "user_deleted_then_cli_verified"
+    }
+  ],
+  "search_acceptance": [
+    {
+      "test": "index_directory_read",
+      "ok": true
+    },
+    {
+      "test": "filename_history_read",
+      "ok": true
+    },
+    {
+      "test": "content_history_read",
+      "ok": true
+    },
+    {
+      "test": "index_add",
+      "ok": true
+    },
+    {
+      "test": "files_slow_start",
+      "ok": true
+    },
+    {
+      "test": "files_slow_completed_fixture_found",
+      "ok": true
+    },
+    {
+      "test": "files_slow_stop",
+      "ok": true
+    },
+    {
+      "test": "content_slow_start",
+      "ok": true
+    },
+    {
+      "test": "content_slow_completed_fixture_found",
+      "ok": true
+    },
+    {
+      "test": "content_slow_stop",
+      "ok": true
+    },
+    {
+      "test": "index_pause",
+      "ok": true
+    },
+    {
+      "test": "index_failures",
+      "ok": true
+    },
+    {
+      "test": "index_resume",
+      "ok": true
+    },
+    {
+      "test": "owned_index_remove",
+      "ok": true
+    },
+    {
+      "test": "owned_history_remove_1",
+      "ok": true
+    },
+    {
+      "test": "owned_history_remove_2",
+      "ok": true
+    },
+    {
+      "test": "owned_fixture_recycled",
+      "ok": true
+    },
+    {
+      "test": "owned_index_and_history_cleanup_verified",
+      "ok": true
+    }
+  ],
+  "duplicate_acceptance": [
+    {
+      "test": "scan_submit",
+      "ok": true
+    },
+    {
+      "test": "groups_read",
+      "ok": true
+    },
+    {
+      "test": "group_files_read",
+      "ok": true
+    },
+    {
+      "test": "selected_cleanup_submit",
+      "ok": true
+    },
+    {
+      "test": "only_selected_fixture_recycled",
+      "ok": true
+    },
+    {
+      "test": "expire_owned_scan",
+      "ok": true
+    },
+    {
+      "test": "owned_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "rag_read_acceptance": [
+    {
+      "test": "config",
+      "ok": true,
+      "keys": [
+        "aiMainOpen",
+        "aiOcrOpen",
+        "aiSearchOpen",
+        "aiSrOpen",
+        "ai_pet_face_open",
+        "ai_pet_open",
+        "ai_recommend_open",
+        "ai_similarity",
+        "history_today_group",
+        "history_today_location",
+        "history_today_open",
+        "history_today_person",
+        "is_daquan_ai_engine",
+        "kv",
+        "laplacian_threshold",
+        "ocr_search_open",
+        "open",
+        "scene_open",
+        "scene_threshold",
+        "scene_version",
+        "show_min_num",
+        "show_pet_min_num",
+        "version",
+        "videoOpen",
+        "video_laplacian_threshold"
+      ],
+      "count": null,
+      "rag_open": null
+    },
+    {
+      "test": "pools",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "model_check",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "model_info",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "datapath_info",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "dirs",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "flush_info",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "index_state",
+      "ok": false,
+      "code": "E_API"
+    }
+  ],
+  "album_lifecycle_acceptance": [
+    {
+      "test": "home_read",
+      "ok": true
+    },
+    {
+      "test": "dirs_read",
+      "ok": true
+    },
+    {
+      "test": "scan_info_read",
+      "ok": false,
+      "code": "E_API"
+    },
+    {
+      "test": "flush_info_read",
+      "ok": true
+    },
+    {
+      "test": "create_private_album",
+      "ok": true
+    },
+    {
+      "test": "album_info",
+      "ok": true
+    },
+    {
+      "test": "rename",
+      "ok": true
+    },
+    {
+      "test": "rename_preserves_description",
+      "ok": true
+    },
+    {
+      "test": "empty_feeds_read",
+      "ok": true
+    },
+    {
+      "test": "owned_album_delete",
+      "ok": true
+    },
+    {
+      "test": "deleted_album_absent",
+      "ok": true
+    }
+  ],
+  "album_import_acceptance": [
+    {
+      "test": "fixture_upload",
+      "ok": true
+    },
+    {
+      "test": "private_album_create",
+      "ok": true
+    },
+    {
+      "test": "owned_directory_register_without_scan",
+      "ok": true
+    },
+    {
+      "test": "import_submit",
+      "ok": true
+    },
+    {
+      "test": "remove_album_membership",
+      "ok": true
+    },
+    {
+      "test": "original_image_preserved",
+      "ok": true
+    },
+    {
+      "test": "owned_import_directory_unregister",
+      "ok": true
+    },
+    {
+      "test": "owned_album_delete",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "video_library_acceptance": [
+    {
+      "test": "list_read",
+      "ok": true
+    },
+    {
+      "test": "dirs_read",
+      "ok": true
+    },
+    {
+      "test": "empty_private_library_create",
+      "ok": true
+    },
+    {
+      "test": "rename",
+      "ok": true
+    },
+    {
+      "test": "scan_status",
+      "ok": true
+    },
+    {
+      "test": "scrape_status",
+      "ok": true
+    },
+    {
+      "test": "add_empty_directory",
+      "ok": true
+    },
+    {
+      "test": "rescan_submit",
+      "ok": true
+    },
+    {
+      "test": "rescan_complete",
+      "ok": true
+    },
+    {
+      "test": "remove_directory_reference",
+      "ok": true
+    },
+    {
+      "test": "owned_library_delete",
+      "ok": true
+    },
+    {
+      "test": "owned_library_absent",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "music_acceptance": [
+    {
+      "test": "playlists_read",
+      "ok": true
+    },
+    {
+      "test": "dirs_read",
+      "ok": true
+    },
+    {
+      "test": "task_status_read",
+      "ok": true
+    },
+    {
+      "test": "services_read",
+      "ok": true
+    },
+    {
+      "test": "playlist_create",
+      "ok": true
+    },
+    {
+      "test": "playlist_info",
+      "ok": true
+    },
+    {
+      "test": "playlist_rename",
+      "ok": true
+    },
+    {
+      "test": "empty_playlist_songs",
+      "ok": true
+    },
+    {
+      "test": "wav_fixture_upload",
+      "ok": true
+    },
+    {
+      "test": "empty_directory_add",
+      "ok": true
+    },
+    {
+      "test": "empty_directory_refresh",
+      "ok": true
+    },
+    {
+      "test": "playlist_directory_add",
+      "ok": true
+    },
+    {
+      "test": "playlist_song_remove",
+      "ok": true
+    },
+    {
+      "test": "original_wav_preserved",
+      "ok": true
+    },
+    {
+      "test": "owned_directory_remove",
+      "ok": true
+    },
+    {
+      "test": "owned_playlist_delete",
+      "ok": true
+    },
+    {
+      "test": "playlist_absent_verified",
+      "ok": true
+    },
+    {
+      "test": "nas_fixture_recycled",
+      "ok": true
+    }
+  ],
+  "music_backend_limitations": [
+    {
+      "action": "playlist_remove:kind=file",
+      "server_response": 500,
+      "source": "NasServices/zmusicv2/models/playlist_file.go",
+      "details": "directory predicate omits playlist_id; song predicate has trailing AND",
+      "cli": "rejected before network write",
+      "server_modified": false
+    }
+  ]
+}

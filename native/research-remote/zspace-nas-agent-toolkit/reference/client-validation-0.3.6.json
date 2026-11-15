@@ -1,0 +1,8 @@
+{
+  "version": "0.3.6",
+  "validation_date": "2026-10-23",
+  "scope": "Windows launcher and credential persistence report remediation",
+  "windows_native": "pending; no Windows host available",
+  "server_changed": false,
+  "real_credentials_used": false
+}

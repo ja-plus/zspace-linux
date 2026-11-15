@@ -1,0 +1,28 @@
+[package]
+name = "zspace-libzrpc"
+version = "0.1.0"
+edition = "2021"
+description = "Clean-room LAN reimplementation of the ZSpace libzrpc connection SDK (native Linux)"
+license = "MIT"
+
+[lib]
+name = "zrpc"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sha2 = "0.10"
+aes-gcm = "0.10"
+aes = "0.8"
+ctr = "0.9"
+ghash = "0.5"
+cipher = "0.4"
+hex = "0.4"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
