@@ -753,3 +753,9 @@
 - 遗留：本地留有备份分支 backup/research-linux-native-re-pre-slim
   （含旧大对象，.git 仍 ~672 MiB）。确认无用后可删分支 +
   git reflog expire --expire=now --all + git gc --prune=now 缩到 ~10 MiB。
+
+### 2026-11-15 后续：备份分支已清理
+
+- 用户确认后删除 backup/research-linux-native-re-pre-slim，
+  reflog expire + gc --prune=now 完成；.git 从 672 MiB 降到 ~4 MiB。
+  上一条的「遗留」已了结，无备份分支残留。
