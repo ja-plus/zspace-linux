@@ -13,6 +13,7 @@ logs/*
 # 原生调研的工作目录（Electron/解包产物）与 Rust 构建产物
 native/work/
 native/libzrpc/target/
+native/player/target/
 
 # 临时与中间产物
 *.part

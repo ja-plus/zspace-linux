@@ -28,6 +28,11 @@ struct State {
     ipv6_priority: i32,
     nas_id: String,
     remote: bool,
+    /// True while a start_service proxy is running (get_nas_status.connected).
+    started: bool,
+    /// IP pinned by `libzrpc_set_private_network_access` (IP-direct login).
+    private_ip: String,
+    private_port: i32,
 }
 
 static STATE: OnceLock<Mutex<State>> = OnceLock::new();
@@ -141,23 +146,72 @@ pub extern "C" fn libzrpc_start_service(enc_cfg: *const c_char) -> *const c_char
     let local_port = cfg["local_port"].as_u64().unwrap_or(13579) as u16;
     let remote_port = cfg["remote_port"].as_u64().unwrap_or(5055) as u16;
     let nas_id = cfg["nas_id"].as_str().unwrap_or("").to_string();
-    let ip = crate::discovery::lookup_ip(&nas_id).unwrap_or_default();
-    // Remote NAS (no LAN IP): use the web-version cloud proxy. The renderer's
-    // requests already carry token= for auth; www.zconnect.cn routes to the NAS.
-    let (target, remote) = if ip.is_empty() {
-        log(&format!("start_service: remote nas_id {nas_id:?} -> zconnect cloud proxy"));
-        ("https://www.zconnect.cn".to_string(), true)
-    } else {
-        let scheme = cfg["scheme"].as_str().unwrap_or("https");
-        (format!("{scheme}://{ip}:{remote_port}"), false)
+
+    // IP pinned by libzrpc_set_private_network_access wins over discovery
+    // (the app uses it for IP-direct login). Empty => auto/LAN discovery.
+    let (pinned_ip, device_type) = {
+        let st = state().lock().unwrap();
+        (st.private_ip.clone(), st.device_type.clone())
     };
+    let discovered = crate::discovery::lookup_ip(&nas_id).unwrap_or_default();
+    let ip = if !pinned_ip.is_empty() {
+        pinned_ip
+    } else {
+        discovered
+    };
+
+    // Remote NAS (behind NAT) or ForceExternal.txt (connect_mode=1): the
+    // official client goes through the zrpl relay keyed by nas_id. A ztoken is
+    // only present for the remote-access/cloud-phone helpers; the main web
+    // proxy sends none, so its absence must not block the relay path.
+    let forced_external = cfg["connect_mode"].as_u64().unwrap_or(0) == 1;
+    if forced_external || ip.is_empty() {
+        let params = crate::relay::ConnectParams {
+            nas_id: nas_id.clone(),
+            ztoken: cfg["ztoken"].as_str().unwrap_or("").to_string(),
+            remote_port: remote_port as u32,
+            service_type: cfg["type"].as_u64().unwrap_or(1) as u32,
+            request_purpose: cfg["request_purpose"].as_u64().unwrap_or(0) as u32,
+            device_type: if device_type == "mac" { 4 } else { 5 },
+            neigh_ip: cfg["neigh_ip"].as_str().unwrap_or("").to_string(),
+        };
+        {
+            let mut st = state().lock().unwrap();
+            st.nas_id = nas_id.clone();
+            st.remote = true;
+        }
+        return match crate::proxy::start_tunnel(local_port, params) {
+            Ok(_) => {
+                state().lock().unwrap().started = true;
+                log(&format!(
+                    "start_service: relay tunnel 127.0.0.1:{local_port} -> nas {nas_id:?}"
+                ));
+                ret_string(json!({
+                    "code": 200,
+                    "data": {
+                        "host": format!("127.0.0.1:{local_port}"),
+                        "port": local_port,
+                        "id": format!("native-{local_port}"),
+                    }
+                }).to_string())
+            }
+            Err(e) => {
+                log(&format!("start_service: relay bind failed: {e}"));
+                ret_string(json!({"code":1,"msg":format!("bind failed: {e}")}).to_string())
+            }
+        };
+    }
+
+    let scheme = cfg["scheme"].as_str().unwrap_or("https");
+    let target = format!("{scheme}://{ip}:{remote_port}");
     {
         let mut st = state().lock().unwrap();
         st.nas_id = nas_id.clone();
-        st.remote = remote;
+        st.remote = false;
     }
     match crate::proxy::start(local_port, target.clone()) {
         Ok(_) => {
+            state().lock().unwrap().started = true;
             log(&format!("proxy 127.0.0.1:{local_port} -> {target}"));
             // App expects code:200 and data.host="ip:port", data.port, data.id.
             ret_string(json!({
@@ -183,12 +237,14 @@ pub extern "C" fn libzrpc_stop_service(id: *const c_char) {
     if let Ok(port) = v.parse::<u16>() {
         crate::proxy::stop(port);
     }
+    state().lock().unwrap().started = false;
 }
 
 #[no_mangle]
 pub extern "C" fn libzrpc_stop_all_service() {
     log("stop_all_service");
     crate::proxy::stop_all();
+    state().lock().unwrap().started = false;
 }
 
 #[no_mangle]
@@ -226,9 +282,17 @@ pub extern "C" fn libzrpc_detect_nas(arg: *const c_char, flag: bool) -> *const c
 pub extern "C" fn libzrpc_get_nas_status() -> *const c_char {
     log("get_nas_status");
     let st = state().lock().unwrap();
+    // Fields consumed by background.js:
+    //   nas_id, local_network, connected, conn_type
     ret_string(json!({
         "code": 200,
-        "data": { "nas_id": st.nas_id, "local_network": !st.remote, "online": true }
+        "data": {
+            "nas_id": st.nas_id,
+            "local_network": !st.remote,
+            "connected": st.started,
+            "conn_type": if st.started { if st.remote { "tunnel" } else { "lan" } } else { "" },
+            "online": true
+        }
     }).to_string())
 }
 
@@ -275,11 +339,20 @@ pub extern "C" fn libzrpc_set_private_network_access(
     c: bool,
     d: bool,
 ) -> c_int {
-    log(&format!(
-        "set_private_network_access {:?} {b} {c} {d}",
-        unsafe { arg_str(a) }
-    ));
-    0
+    let ip = unsafe { arg_str(a) };
+    let has_ip = !ip.is_empty();
+    log(&format!("set_private_network_access {ip:?} {b} {c} {d}"));
+    {
+        let mut st = state().lock().unwrap();
+        st.private_ip = ip;
+        st.private_port = b;
+    }
+    // The app treats `> 1` as success (`setPrivateNetworkAccess ... i > 1`).
+    if has_ip {
+        2
+    } else {
+        1
+    }
 }
 
 #[no_mangle]

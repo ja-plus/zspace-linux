@@ -1,0 +1,28 @@
+#!/bin/sh
+set -e
+PKG=com.zspace.native.spark
+
+# 星火红线：postrm 必须清理 ~/.deepinwine/<包名>。
+# 原生版不使用 Wine，但保留这条清理（兼容曾经装过同名的 Wine 形态，且零副作用）。
+case "$1" in
+    remove|purge)
+        rm -rf "$HOME/.deepinwine/$PKG" 2>/dev/null || true
+        for u in /home/*; do
+            [ -d "$u/.deepinwine/$PKG" ] && rm -rf "$u/.deepinwine/$PKG" 2>/dev/null || true
+        done
+        ;;
+esac
+
+# 原生版用户数据（Electron userData）只在 purge 时删除。
+# 目录名尚未在真机上实测：先按候选清单清理，确认后再收敛为唯一目录。
+if [ "$1" = "purge" ]; then
+    for d in \
+        "$HOME/.config/zspace" "$HOME/.config/ZSpace" "$HOME/.config/极空间" \
+        "$HOME/.cache/zspace" "$HOME/.cache/ZSpace" "$HOME/.cache/极空间" \
+        "$HOME/.local/share/zspace" "$HOME/.local/share/ZSpace"; do
+        [ -e "$d" ] && rm -rf "$d" 2>/dev/null || true
+    done
+fi
+
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications || true
+exit 0

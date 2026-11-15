@@ -1,0 +1,210 @@
+// Extracted from libzrpc_x64.dll embedded FileDescriptorProto (2026-11-15).
+// Field numbers/types verified against descriptor; enum values from descriptor.
+// Package/namespace must stay msg.tp (wire-compatible, names are irrelevant).
+syntax = "proto2";
+
+package msg.tp;
+
+message response {
+    optional RESULT_CODE result_code = 1;
+}
+
+message zrpc_response {
+    optional RESULT_CODE result_code = 1;
+    optional string useful_addr = 2;
+    optional int32 cluster_id = 3;
+}
+
+message isp_addr {
+    optional int32 isp = 1;
+    optional string addr = 2;
+}
+
+message zrpc_guide_response {
+    optional RESULT_CODE result_code = 1;
+    optional string real_addr = 2;
+    optional int32 nas_isp = 3;
+    optional int32 zrpc_isp = 4;
+    optional string useful_addr = 5;
+    optional int32 cluster_id = 6;
+    required isp_addr nas_node_addr_list = 7;
+    optional string nas_server_id = 8;
+    optional uint32 guide_ttl_seconds = 9;
+}
+
+message zrpl_greet_request {
+    optional ZRPL_GREET_TYPE greet_type = 1;
+}
+
+message zrpl_greet_request_v2 {
+    optional string http_header = 1;
+    optional ZRPL_GREET_TYPE greet_type = 2;
+}
+
+message zrpc_connect_request {
+    optional string nas_id = 1;
+    optional uint32 remote_port = 2;
+    optional uint32 service_type = 3;
+    optional REQUEST_PURPOSE request_purpose = 4;
+    optional DEVICE_TYPE device_type = 5;
+    optional string neigh_ip = 6;
+    optional string ztoken = 7;
+    optional string zrpc_addr = 10;
+    optional string request_uuid = 11;
+    optional bool is_forward = 12;
+    optional int32 isp = 13;
+}
+
+message zrpc_connect_guide {
+    optional string nas_id = 1;
+    optional uint32 guide_ver = 2;
+}
+
+message zrpc_notify_request {
+    optional string nas_id = 1;
+    optional bytes custom_data = 2;
+}
+
+message zrps_connect_request {
+    optional string nas_id = 1;
+    optional bool is_signal = 2;
+    optional string internal_id = 3;
+    optional string token = 4;
+    optional string version_id = 5;
+}
+
+message signal_request {
+    optional SIGNAL_CODE signal_code = 1;
+    optional bytes custom_data = 2;
+}
+
+message p2p_connect_request {
+    optional string nas_id = 1;
+    optional uint32 remote_port = 2;
+    optional uint32 service_type = 3;
+    optional REQUEST_PURPOSE request_purpose = 4;
+    optional DEVICE_TYPE device_type = 5;
+    optional string neigh_ip = 6;
+    optional string ztoken = 7;
+    optional string src_addr = 10;
+    optional bool is_pre_created = 11;
+}
+
+message public_connect_greet_request {
+    optional bool is_reverse_connect = 1;
+    optional string src_nas_id = 2;
+    optional bool is_upnp_addr = 3;
+}
+
+message public_connect_greet_request_v2 {
+    optional string http_header = 1;
+    optional bool is_reverse_connect = 2;
+    optional string src_nas_id = 3;
+    optional bool is_upnp_addr = 4;
+}
+
+message transport_header {
+    optional ACTION_CODE action_code = 1;
+}
+
+message nop_body {
+}
+
+message data_segment_body {
+    optional uint32 size = 1;
+    optional bytes data = 2;
+}
+
+message keep_alive_body {
+    optional bool is_request = 1;
+}
+
+message notify_idle_body {
+    optional bool is_request = 1;
+    optional uint32 sequence = 2;
+}
+
+message notify_busy_body {
+    optional bool is_request = 1;
+    optional uint32 sequence = 2;
+}
+
+enum ZRPL_GREET_TYPE {
+    ZRPLGT_UNKNOWN = 0;
+    ZRPLGT_ZRPC_CONNECT = 1;
+    ZRPLGT_ZRPS_CONNECT = 2;
+    ZRPLGT_ZRPC_NOTIFY = 3;
+    ZRPLGT_ZRPC_GUIDE = 4;
+}
+
+enum REQUEST_PURPOSE {
+    RP_NONE = 0;
+    RP_UNKNOWN = 1;
+    RP_MESSAGE = 2;
+    RP_FLASH_TRANSFER = 3;
+    RP_FILE_UPLOAD = 4;
+    RP_FILE_DOWNLOAD = 5;
+    RP_PLAY = 6;
+    RP_FILE_SYNC = 7;
+    RP_RCLONE = 8;
+    RP_NAS_BACKUP = 9;
+    RP_REMOTE_NAS_ACCESS = 10;
+    RP_REMOTE_NEIGH_ACCESS = 11;
+    RP_FILE_SYNC_API = 17;
+    RP_FILE_SYNC_FLOW = 18;
+    RP_FILE_ZFILEV2 = 19;
+    RP_FILE_WEBSOCKET = 20;
+    RP_FILE_SHARE = 21;
+    RP_WEBSOCKET = 22;
+    RP_WEB_PROXY = 23;
+    RP_FUTURE_SERVICE1 = 31;
+    RP_FUTURE_SERVICE2 = 32;
+    RP_FUTURE_SERVICE3 = 33;
+    RP_FUTURE_SERVICE4 = 34;
+    RP_FUTURE_SERVICE5 = 35;
+    RP_FUTURE_SERVICE6 = 36;
+    RP_FUTURE_SERVICE7 = 37;
+    RP_FUTURE_SERVICE8 = 38;
+}
+
+enum DEVICE_TYPE {
+    DEVT_UNKNOWN = 0;
+    DEVT_IOS = 1;
+    DEVT_ANDROID = 2;
+    DEVT_TV = 3;
+    DEVT_MAC = 4;
+    DEVT_PC = 5;
+    DEVT_WEB = 6;
+    DEVT_MINI_PROGRAM = 7;
+    DEVT_H5 = 8;
+    DEVT_NAS = 9;
+    DEVT_APPLETV = 10;
+    DEVT_OHOS = 11;
+}
+
+enum RESULT_CODE {
+    RC_SUCCESS = 0;
+    RC_INVALID_MESSAGE = 1;
+    RC_INVALID_PARAMS = 2;
+    RC_SERVICE_UNAVAILABLE = 3;
+    RC_ZRPS_IS_NOT_ONLINE = 4;
+    RC_ZRPS2ZRPL_TRANSFER_ERROR = 5;
+    RC_ZRPL2ZRPS_CONNECT_TIMEOUT = 6;
+    RC_ZRPL2ZRPL_TRANSFER_ERROR = 7;
+    RC_ZRPC2ZRPL_GUIDE_ERROR = 8;
+    RC_ZRPC2ZRPL_CLUSTER_ERROR = 9;
+}
+
+enum SIGNAL_CODE {
+    SIGNAL_NOP = 0;
+    SIGNAL_NEW_CONNECTION = 1;
+    SIGNAL_NOTIFY = 2;
+}
+
+enum ACTION_CODE {
+    AC_NOP = 0;
+    AC_DATA_SEGMENT = 1;
+    AC_KEEP_ALIVE = 2;
+    AC_NOTIFY_IDLE = 3;
+    AC_NOTIFY_BUSY = 4;
+}

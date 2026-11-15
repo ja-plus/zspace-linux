@@ -759,3 +759,192 @@
 - 用户确认后删除 backup/research-linux-native-re-pre-slim，
   reflog expire + gc --prune=now 完成；.git 从 672 MiB 降到 ~4 MiB。
   上一条的「遗留」已了结，无备份分支残留。
+
+## 2026-11-15 远程中继协议攻关：Windows DLL 未 strip，schema/握手/帧格式全部坐实
+
+- 背景：research/linux-native-re 的下一站是「提取完整 proto + 反汇编握手密码学」。
+  旧结论认为 Windows dll masked（stripped），只剩 mac dylib 可用；本轮复核推翻。
+- 决定/结论：
+  - **更正**：`resources/app.asar.unpacked/sdk/libzrpc_x64.dll` 导出表含
+    **30,586 个 C++ 符号**（含地址），`zsi::tls` / `zsi::transport` /
+    `zsi::crypto` / `msg::tp` / `msg::tls` 全部可直读。不需要再下载 394 MB 的 mac 包。
+    旧结论「Windows/Android 都 stripped，唯独 mac 保留符号」**已被本条取代**
+    （至少 Windows 版保留了导出符号；Android 未复验）。
+  - proto schema 从 DLL 内嵌 FileDescriptorProto 提取，落盘
+    `native/proto/message.tp.proto`、`native/proto/message.tls.proto`
+    （脚本 `build/research-material/extract_proto.py`）。
+  - 握手（`zsi::tls::tls_connection`）：
+    client_hello{proto_version=1, client_rand=BN_rand(256)+BN_bn2hex 大写64位,
+    encode_pubkey=true} → server_hello{server_rand, server_pub_key(PEM
+    `BEGIN PUBLIC KEY`, PEM_read_bio_RSA_PUBKEY)} →
+    pre_master_secret=同款随机 hex64，`RSA_public_encrypt(PKCS1_PADDING)`+base64 →
+    master_secret=`sha256(client_rand‖server_rand‖pre_master)` →
+    client_verify_data=`base64(aes::encrypt(master_secret, server_rand))` →
+    server_finish=`base64(aes::encrypt(master_secret, client_rand))`。
+  - **关键坑**：`zsi::crypto::sha256::result` 用 lower-case hex 表，但**每字节先写低
+    半字节再写高半字节**（nibble 交换），不是标准 hex；master_secret 与
+    aes 的 key/iv 派生都走它。必须原样复刻，否则对端校验必失败。
+  - `aes::encrypt`：digest=sha256(secret) 上述 nibble-swap hex（64 字符）→
+    key=digest[0..32]（ASCII）、iv=digest[0..16]（ASCII）、AES-256-GCM 16B IV，
+    **不追加 auth tag**。与已有 `decrypt_gcm_no_tag` 同一构造。
+  - 帧格式：每个 protobuf 消息前 4B 大端长度（`htonl(ByteSize)`）；
+    握手阶段明文；握手完成后 `base_extranet_connection::async_write_data`
+    把内存流按 0x4000 切块，每块加密后包成
+    `transport_header{AC_DATA_SEGMENT=1}` + `data_segment_body{size, data}` 两帧。
+- 证据：Windows DLL 导出表（30586 项）；`native/proto/*.proto`；
+  `build/research-material/proto-dump.txt`；反汇编函数
+  `write_client_hello / generate_rand / generate_master_secret /
+  generate_client_verify_data / generate_server_verify_data /
+  check_server_verify_data / rsa::load_public_key_from_str / rsa::encrypt /
+  sha256::result / aes::encrypt / message_io::async_write_message_list /
+  base_extranet_connection::async_write_data`。
+- 影响：`native/libzrpc/src/relay.rs` 已实现 proto 编解码、帧编解码、握手状态机、
+  nibble-swap sha256、session cipher、PKCS#1 RSA；`cargo test` 17/17 过。
+  仍未完成：dispatch 信令（signal/guide/connect 的连接与消息流）、greet 与
+  隧道双向转发、真实远程 NAS 联调（需用户登录 token + 一台远程 NAS）。
+- 物料：`native/work/win/out/libzrpc_x64.dll`（13 MB，gitignore）保留供继续反汇编；
+  320 MB 的 app-64.7z 用完即删。
+
+## 2026-11-15 中继信令打通：greet 前缀、guide/connect、隧道数据面
+
+- 背景：上一轮只做到 msg.tls 握手；本轮把 guide/connect 信令与隧道数据面补齐，
+  并与官方 dispatch 做了活体联调。
+- 决定/结论：
+  - **信令前必须先发 `zrpl_greet_request{greet_type}`**：guide 用 4
+    (`ZRPLGT_ZRPC_GUIDE`)，connect 用 1 (`ZRPLGT_ZRPC_CONNECT`)；问候帧与
+    消息帧同批发出。只发 guide 会被服务端直接断开。
+  - 平台配置 `https://zrpl-ucloud.zenithspace.net/platform/config/zrp/zrpc/v16`
+    实测返回 `servers.zrpl.addr = dispatch-yz.zenithspace.net:9091`
+    （注意是 **9091**，不是 3388；confirm_server 才是 3388）。
+  - 流程：TCP → greet(4)+guide{nas_id,guide_ver=2} → guide_response
+    （real_addr/useful_addr/cluster_id）→ 若指向别的节点则重连 →
+    greet(1)+connect{nat_id,remote_port,service_type,request_purpose,
+    device_type,neigh_ip,ztoken,zrpc_addr,request_uuid,is_forward,isp} →
+    zrpc_response → msg.tls 四步握手 → 数据面：
+    0x4000 明文切块 + AES-256-GCM（无 tag）+ data_segment 两帧。
+  - 客户端**不发** greet v2（`zrpl_greet_request_v2` 在客户端无构造点，
+    旧文档的「greet 带 http_header」判断已被本条取代）。
+  - 远程连接用 `request_purpose=10`（RP_REMOTE_NAS_ACCESS）、`device_type=5`、
+    `ztoken=user.token`；本机主代理（simpleStartSerivce）不传 ztoken。
+- 证据：
+  - `cargo test` 19 项全过，其中 `tunnel_roundtrip_against_mock_relay`
+    用本地 mock zrpl 跑通 guide→connect→握手→加密回显；
+  - `cargo test live_dispatch_guide_probe -- --ignored` 对官方 dispatch
+    实测：bogus nas_id 返回 `guide result_code=8`（RC_ZRPC2ZRPL_GUIDE_ERROR），
+    证明问候/guide/4B 大端帧格式与真实服务端一致。
+- 影响：`relay.rs` / `proxy.rs` / `ffi.rs` 已串起来：远程 NAS 在 `start_service`
+  里走 `start_tunnel`，每个本地连接一条隧道透明转发。剩余仅「用真实 ztoken
+  与远程 NAS 跑通 connect + 隧道」，需要用户登录态。
+
+### 2026-11-15 口径升级（用户，来自并行会话）
+
+- 最终目标：Linux 原生运行极空间 + 打 deb。
+- 优先级：① 复用官方其他平台包（Windows/Android/macOS）里的资产/二进制/SDK；
+  ② 不好复用的先找 Linux 开源替代或小改可用；③ 最后才 REA 逆向 + Rust 重写。
+- 协作：另一条会话在 `build/research-reuse/` 下只新建文件；**不要清理/删除该目录，
+  也不要把它纳入 git 改动**（build/ 本身已 gitignore）。
+- 汇报：阶段性产出或卡点要立刻发简报，不要攒到最后。
+
+## 2026-11-15 原生链路收尾：ABI 核对、远程分支接入、行为对齐
+
+- 背景：中继协议打通后，按「先复用、后开源、最后重写」的口径把连接层收尾。
+- 决定/结论：
+  - **主代理不带 ztoken**：`startWebProxy` → `we(13579,5055,nasId)` 的配置是
+    `{local_port,remote_port,type:1,nas_id}`（含可选 `connect_mode=1`）；
+    带 ztoken 的只有 remote-access/云手机 helper。故远程判定改为
+    「无局域网 IP 或 connect_mode=1 → 走中继」，**不再以 ztoken 为门槛**，
+    `request_purpose` 原样透传（不再把 0 改成 10）。
+  - `libzrpc_set_private_network_access` 的 IP 要参与选路（IP 直连登录），
+    返回值 app 以 `>1` 判成功 → 有 IP 返回 2、清空返回 1。
+  - `get_nas_status` 补齐 app 真正消费的字段：`nas_id/local_network/connected/conn_type`。
+  - `run-native.sh` 启动前自动构建/复用 `libzrpc.so` 并跑 `patch_app.py`
+    （linux dll 分支 + 删 win32 .node + 装 sdk/libzrpc.so），再接 Electron。
+- 证据：
+  - ABI：app.asar 的 18 项 ffi 表逐项对照 release `.so`，`nm -D` 全命中；
+    ctypes 实调 init/set_device_type/set_private_network_access/start_service(坏输入)/
+    get_nas_status 等均正常，`set_private_network_access` 有 IP 返回 2。
+  - 测试：`cargo test` 20 过 1 ignored，新增 `ffi_start_service_routes_remote_through_relay`
+    （加密配置 → start_service → 本地端口 → 中继 → 回显），全程无真实 NAS。
+  - 对照 `build/research-reuse/opensource-mapping.md`：连接层无可用开源替代，
+    与矩阵「重写」结论一致；代理按 remote_port 泛化，覆盖 purpose 7/8 等。
+- 影响：原生版远程 NAS 路径已接到「只差真实登录凭据」；`build/research-reuse/`
+  只读未改。
+
+## 2026-11-15 原生版真机启动验证（无 Wine，到登录页）
+
+- 背景：用户批准下载 Electron 33.3.1 linux-x64，要求把原生链路跑到登录页并留证。
+- 组装：Electron 33.3.1 linux-x64（npmmirror 106 MB）解到 native/work/electron/dist；
+  官方 app-64.7z 里取 app.asar + app.asar.unpacked 的 node_modules/icons/dialog，
+  asar 解包后覆盖合并；sqlite3 补 napi-v6-linux-glibc-x64（npmmirror
+  registry.npmmirror.com/-/binary/sqlite3/v5.1.4/…tar.gz）；
+  patch_app.py 打 linux dll 分支并删 2 个 win32 .node。
+- 结果：
+  - 主进程 `load dll success`，证明 ffi-napi 成功加载我们的 libzrpc.so；
+  - `Main window loaded: app://./index.html#/login`；CDP 取到
+    title=极空间 - 家庭私有云、appLen=11835、inputs=4、buttons=12、无 JS 错误；
+    CDP 点击「IP直连」切页成功（IPv4 输入出现）。
+  - 截图与日志：build/research-native-run/evidence/（login-page.png、
+    ip-direct.png、app-launch.log、summary.md）。
+- 坑：
+  - devtools 端口被残留实例占用会报 "Cannot start http server for devtools"；
+    先 `pkill -x electron` + 删 SingletonLock/Socket/Cookie，再换端口启动。
+  - 后台进程要用 `setsid nohup`，否则命令结束时被回收。
+  - urllib 访问 127.0.0.1 会走残留代理变量，需 unset 或 no_proxy。
+  - 已知非阻塞：VlcPreload.exe/UZPlayer.exe 是 Windows 版，播放层后续换 libvlc。
+- 停点：登录需真实账号；按约定不索要凭据，停在登录页。
+
+## 2026-11-15 LAN 代理改流式（修 4K 播放 OOM）+ 自测
+
+- 背景：播放计划指出 `proxy.rs` 用 `resp.bytes()` 全量缓冲，播 11.5 GB 片源会 OOM。
+- 改动：
+  - 响应体改为 64 KiB 缓冲循环 `read` → 直接写回，不落内存；
+  - 保留 `206`/`Content-Range`/`Content-Length`/`ETag`/`Last-Modified`，
+    去掉重复 content-length；无 content-length 时对客户端用 chunked 重编码；
+  - 明确 `Connection: close`；支持 `HEAD`（不回 body）；
+  - `/splay/` 路径不再注入 `webagent/rnd`（官方模板里没有，避免影响 Range/seek）；
+  - reqwest 去掉 60s 总超时（4K 播放会超过），只保留 10s connect_timeout。
+- 验证：`cargo test` 23 过 1 ignored，其中
+  `streams_206_and_preserves_range_headers`（4 MB + 后 400 ms 延迟，断言首块
+  <300 ms 到达、Range 原样透传、/splay 无额外参数）、`streams_chunked_response`、
+  `head_request_has_no_body`。
+- 影响：LAN 直连播放/seek 不再受内存限制；远程隧道路径本来就是透传，不受影响。
+
+## 2026-11-15 原生 deb 产物（真实载荷）
+
+- 路径：`build/com.zspace.native.spark_2.46.2026101501+native.1-1_amd64.deb`
+- 大小：92,245,376 B；Installed-Size：327,864 KiB
+- SHA256 `9bc8b37022f6c3f722d1970e8106744052e130c5d8d7e62f8e9902f142c6c8e2`
+- 源载荷：Electron 33.3.1 linux-x64 + 官方 app.asar 解包 + 补丁 + 自研 libzrpc.so
+- 自检：`build/native-verify-report.txt` 全过（A1–A16/B1–B15/C1–C6）
+- 构建：`scripts/build_native_deb.sh`（默认自动用 native/work 载荷）；
+  静态素材在 `packaging-native/`，与 Wine 版 `packaging/` 并存互不影响。
+
+## 2026-11-15 登录后弹「局域网设备扫描」：根因与阶段性修复
+
+- 现象：原生版账号登录成功后弹「局域网设备扫描 / 没有在局域网中发现设备」，
+  Windows 原版不出现。
+- 证据链（用户实机日志 + CDP）：
+  - `~/.config/zspace/logs/main.log`：`simpleStartSerivce` 返回 200，
+    随后 `http://127.0.0.1:13579/key/pub` 报 `AxiosError Network Error`；
+  - 渲染器 `chunk-3b0dd3ec`：`handleLostConnToServer()` 才把
+    `noConnDlgVisible` 置 true（面板只在「取 NAS 公钥失败」时出现）；
+  - 我们的日志：`start_service: relay tunnel` → 说明走了中继，但隧道没建起来。
+- 中继三个真实差异（已修）：
+  1. guide 返回的 `real_addr/useful_addr` **只有 IP 没有端口**：官方客户端沿用
+     当前 dispatch 的端口（实测 9091）。已加 `ensure_port()`。
+  2. 握手消息必须包在 **data-segment 帧**里（裸 `[4B len][msg]` 服务端不回）；
+     已加 `send_handshake_message/read_handshake_message`。
+  3. `server_hello.server_pub_key` 是 **base64 后的 PEM**；已加
+     `normalize_server_pub_key()`。
+- 当前卡点：完整握手能跑到 `server_finish`，但服务端返回 **result_code=2
+  (RC_VERIFY_DATA_FAILED)**。已穷举但全部失败：
+  - sha256 hex 风格（nibble-swap / 标准）、master 拼接顺序 6 种、
+    key/iv 切片 4 种、verify 输入 client/server、RSA OAEP、proto 字段交换、
+    encode_pubkey=false。
+  - 该 rc 同时覆盖「RSA 解密失败」和「verify 不匹配」，静态无法区分。
+- 下一步（未做）：用官方 Windows 客户端 + 本地 mock 中继（自控 RSA 密钥）
+  抓一次真实握手，反推 pre_master/master/verify 的精确公式；或继续静态分析
+  `write_server_hello` 里的服务端校验分支。
+- 临时调试开关（**交付前必须清理**）：`ZRPC_HEX_STD`、`ZRPC_KEY_STD`、
+  `ZRPC_ORDER`、`ZRPC_VERIFY_CLIENT`、`ZRPC_SLICE`、`ZRPC_RSA_OAEP`、
+  `ZRPC_SWAP_FIELDS`、`ZRPC_NO_ENCODE_PUBKEY`。

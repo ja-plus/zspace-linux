@@ -8,3 +8,4 @@ pub mod crypto;
 pub mod discovery;
 pub mod ffi;
 pub mod proxy;
+pub mod relay;

@@ -114,16 +114,10 @@ pub fn to_hex(bytes: &[u8]) -> String {
     hex::encode(bytes)
 }
 
-/// Decrypt AES-256-GCM ciphertext that was sent WITHOUT the auth tag.
-///
-/// The official `encodeService` does `concat([update, final]).toString('base64')`
-/// and never appends `getAuthTag()`, so the wire carries only the CTR-encrypted
-/// payload. GCM without tag verification is CTR mode with the GCM counter:
-/// for a 16-byte (128-bit) IV, J0 = GHASH_H(IV || 0^64 || [128]_64), and the
-/// data counter starts at inc32(J0).
-pub fn decrypt_gcm_no_tag(key: &[u8; 32], iv: &[u8; 16], ct: &[u8]) -> Vec<u8> {
+/// First data counter block for tag-less GCM: inc32(J0), where
+/// J0 = GHASH_H(IV || 0^64 || [len(IV)=128]_64).
+fn gcm_no_tag_counter(key: &[u8; 32], iv: &[u8; 16]) -> [u8; 16] {
     use aes::cipher::{BlockEncrypt, KeyInit as _};
-    use cipher::{KeyIvInit, StreamCipher};
     use ghash::universal_hash::UniversalHash;
 
     // H = AES_K(0^128)
@@ -132,7 +126,6 @@ pub fn decrypt_gcm_no_tag(key: &[u8; 32], iv: &[u8; 16], ct: &[u8]) -> Vec<u8> {
     aes.encrypt_block(&mut h_block);
     let h = ghash::Key::from_slice(&h_block);
 
-    // J0 = GHASH_H(IV || 0^64 || [len(IV)=128]_64)   (IV is exactly 128 bits)
     let mut ghash = ghash::GHash::new(h);
     let mut input = Vec::with_capacity(32);
     input.extend_from_slice(iv);
@@ -141,14 +134,37 @@ pub fn decrypt_gcm_no_tag(key: &[u8; 32], iv: &[u8; 16], ct: &[u8]) -> Vec<u8> {
     ghash.update_padded(&input);
     let j0 = ghash.finalize();
 
-    // counter = inc32(J0)
     let mut counter = [0u8; 16];
     counter.copy_from_slice(&j0);
     let c = u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]]).wrapping_add(1);
     counter[12..16].copy_from_slice(&c.to_be_bytes());
+    counter
+}
 
+/// Decrypt AES-256-GCM ciphertext that was sent WITHOUT the auth tag.
+///
+/// The official `encodeService` does `concat([update, final]).toString('base64')`
+/// and never appends `getAuthTag()`, so the wire carries only the CTR-encrypted
+/// payload. The native relay handshake/session cipher does the same
+/// (`zsi::crypto::aes::encrypt` never appends the tag either).
+pub fn decrypt_gcm_no_tag(key: &[u8; 32], iv: &[u8; 16], ct: &[u8]) -> Vec<u8> {
+    use cipher::{KeyIvInit, StreamCipher};
+
+    let counter = gcm_no_tag_counter(key, iv);
     let mut cipher = ctr::Ctr32BE::<aes::Aes256>::new(key.into(), (&counter).into());
     let mut out = ct.to_vec();
+    cipher.apply_keystream(&mut out);
+    out
+}
+
+/// Encrypt AES-256-GCM without appending the auth tag (inverse of
+/// [`decrypt_gcm_no_tag`]; mirrors `zsi::crypto::aes::encrypt`).
+pub fn encrypt_gcm_no_tag(key: &[u8; 32], iv: &[u8; 16], pt: &[u8]) -> Vec<u8> {
+    use cipher::{KeyIvInit, StreamCipher};
+
+    let counter = gcm_no_tag_counter(key, iv);
+    let mut cipher = ctr::Ctr32BE::<aes::Aes256>::new(key.into(), (&counter).into());
+    let mut out = pt.to_vec();
     cipher.apply_keystream(&mut out);
     out
 }

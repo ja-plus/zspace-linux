@@ -23,4 +23,19 @@ export NO_PROXY="$no_proxy"
 # must exist or the renderer gets name=null and path.join(null) crashes Vue.
 ln -sfn "$APP" "$WORK/electron/dist/resources/app"
 
+# Our libzrpc.so (LAN discovery + local proxy + zrpl relay). Build it when a
+# compiler is available and the artifact is missing; otherwise expect a
+# prebuilt file shipped next to this script.
+SO="$HERE/libzrpc/target/release/libzrpc.so"
+if [ ! -f "$SO" ] && command -v cargo >/dev/null 2>&1; then
+    echo "== building libzrpc.so =="
+    (cd "$HERE/libzrpc" && cargo build --release) || { echo "libzrpc build failed"; exit 1; }
+fi
+if [ -d "$APP" ] && [ -f "$SO" ]; then
+    # Idempotent: linux dll branch + drop win32 .node + install sdk/libzrpc.so
+    python3 "$HERE/patches/patch_app.py" "$APP" "$SO" || { echo "app patch failed"; exit 1; }
+else
+    echo "warning: $APP or $SO missing; app not patched" >&2
+fi
+
 exec "$ELECTRON" "$APP" "$@"
