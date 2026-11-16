@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
-"""Patch the extracted official app for native Linux (M3 + player MVP).
+"""Patch the extracted official app for native Linux (M3 + player + sync + mount).
 
 Usage:
-    patch_app.py <app-dir> [libzrpc.so] [zspace-player]
+    patch_app.py <app-dir> [libzrpc.so] [zspace-player] [syncthing]
+                 [zspace-mount-monitor] [rclone]
 
   1. background.js: load libzrpc.so on linux (was win32 dll fallback).
   2. background.js: 6 player patches from native/player/PATCH-SPEC.md
      (Linux player path, no VlcPreload.exe, pkill, preloaded flag,
      playsdk disabled, skip Public/ZSpace copy).
-  3. Remove win32 build/Release/*.node so node-gyp-build picks linux prebuilds.
-  4. Install our native libzrpc.so into sdk/.
-  5. Install zspace-player into uzplayer/ (0755).
+  3. background.js: sync patches from native/sync/PATCH-SPEC.md
+     (bin path -> bin/syncthing, upstream `generate --home=` syntax,
+     accept upstream ISO log timestamps).
+  4. background.js: mountV2 patches (drop .exe on linux, kill the monitor by
+     its 15-char truncated /proc/comm name).
+  5. Remove win32 build/Release/*.node so node-gyp-build picks linux prebuilds.
+  6. Install our native libzrpc.so into sdk/.
+  7. Install zspace-player into uzplayer/ (0755).
+  8. Install syncthing into bin/syncthing (0755).
+  9. Install zspace-mount-monitor as bin/ZSpaceMountMonitor, rclone as
+     bin/ZSpaceMount, and the official filter.txt into bin/filter.txt.
 
 Idempotent. Validates JS syntax before writing when a JS engine is available
 (`ZS_NODE` env, or `node` in PATH; the Electron binary works with
@@ -33,6 +42,22 @@ PLAYER_SRC = (
     if len(sys.argv) > 3 and sys.argv[3]
     else os.path.join(REPO, 'native/player/target/release/zspace-player')
 )
+SYNC_SRC = (
+    sys.argv[4]
+    if len(sys.argv) > 4 and sys.argv[4]
+    else os.path.join(REPO, 'native/work/syncthing/syncthing')
+)
+MOUNT_SRC = (
+    sys.argv[5]
+    if len(sys.argv) > 5 and sys.argv[5]
+    else os.path.join(REPO, 'native/mount/target/release/zspace-mount-monitor')
+)
+RCLONE_SRC = (
+    sys.argv[6]
+    if len(sys.argv) > 6 and sys.argv[6]
+    else os.path.join(REPO, 'native/work/rclone/rclone')
+)
+FILTER_SRC = os.path.join(REPO, 'packaging-native/mount-filter.txt')
 BG = os.path.join(APP, 'background.js')
 
 OLD = '"darwin"==process.platform?"libzrpc.dylib":"libzrpc_x64.dll"'
@@ -93,11 +118,37 @@ PLAYER_PATCHES = [
 ]
 
 
-def patch_player():
+SYNC_PATCHES = [
+    ("sync-bin",
+     'this.binPath=U.a.join(__dirname,"bin",nt).replace("app.asar","app.asar.unpacked");',
+     'this.binPath=U.a.join(__dirname,"bin",nt).replace("app.asar","app.asar.unpacked");'
+     '"linux"==process.platform&&(this.binPath=U.a.join(__dirname,"bin","syncthing"));'),
+    ("sync-generate",
+     '["-no-browser","-generate="+this.configPath]',
+     '"linux"==process.platform?["generate","--home="+this.configPath]:["-no-browser","-generate="+this.configPath]'),
+    ("sync-log-date",
+     '/^(\\d+\\/\\d+\\/\\d+ \\d+:\\d+:\\d+)/',
+     '/^(\\d+[\\/-]\\d+[\\/-]\\d+ \\d+:\\d+:\\d+)/'),
+]
+
+# mountV2: monitor/rclone live in <app>/bin. On Linux drop the .exe suffix and
+# handle the 15-char /proc/<pid>/comm truncation ("ZSpaceMountMoni").
+MOUNT_PATCHES = [
+    ("mount-no-exe",
+     'vn||(bn+=".exe",wn+=".exe");',
+     '"linux"==process.platform||vn||(bn+=".exe",wn+=".exe");'),
+    ("mount-kill-comm",
+     'e.name.indexOf("MountMonitor")>-1?n=e.pid:e.name.indexOf("Mount")>-1&&(o=e.pid)',
+     'e.name.indexOf("MountMonitor")>-1||"linux"==process.platform&&e.name.indexOf("MountMoni")>-1'
+     '?n=e.pid:e.name.indexOf("Mount")>-1&&(o=e.pid)'),
+]
+
+
+def apply_patches(tag, patches):
     src = open(BG, encoding='utf-8').read()
     changed = False
     results = []
-    for name, old, new in PLAYER_PATCHES:
+    for name, old, new in patches:
         if new in src:
             results.append((name, 'already'))
             continue
@@ -122,20 +173,20 @@ def patch_player():
                 f.write(src)
             ok = syntax_ok(tmp)
             if ok is False:
-                print('[player] ERROR: patched JS failed syntax check; not written')
+                print(f'[{tag}] ERROR: patched JS failed syntax check; not written')
                 os.remove(tmp)
                 sys.exit(2)
             if ok is None:
-                print('[player] note: no JS engine for syntax check (ZS_NODE/node)')
+                print(f'[{tag}] note: no JS engine for syntax check (ZS_NODE/node)')
             os.replace(tmp, BG)
         finally:
             if os.path.exists(tmp):
                 os.remove(tmp)
 
     for name, state in results:
-        print(f'[player] {name}: {state}')
+        print(f'[{tag}] {name}: {state}')
     if any(s.startswith('WARNING') for _, s in results):
-        print('[player] some anchors were missing; player may not start (check PATCH-SPEC.md)')
+        print(f'[{tag}] some anchors were missing; feature may not work (check PATCH-SPEC.md)')
 
 
 def strip_win32_bindings():
@@ -175,10 +226,47 @@ def install_player():
     print(f'[player] installed {dst} ({os.path.getsize(dst)} bytes)')
 
 
+def install_sync():
+    if not SYNC_SRC or not os.path.isfile(SYNC_SRC):
+        print(f'[sync] WARNING: syncthing binary not found: {SYNC_SRC}')
+        print('[sync] download 1.27.7 into native/work/syncthing/syncthing or pass arg 4')
+        return
+    dst_dir = os.path.join(APP, 'bin')
+    os.makedirs(dst_dir, exist_ok=True)
+    dst = os.path.join(dst_dir, 'syncthing')
+    if os.path.abspath(SYNC_SRC) != os.path.abspath(dst):
+        shutil.copyfile(SYNC_SRC, dst)
+    os.chmod(dst, 0o755)
+    print(f'[sync] installed {dst} ({os.path.getsize(dst)} bytes)')
+
+
+def install_mount():
+    bin_dir = os.path.join(APP, 'bin')
+    os.makedirs(bin_dir, exist_ok=True)
+    pairs = [
+        ('ZSpaceMountMonitor', MOUNT_SRC, 0o755),
+        ('ZSpaceMount', RCLONE_SRC, 0o755),
+        ('filter.txt', FILTER_SRC, 0o644),
+    ]
+    for name, src, mode in pairs:
+        if not src or not os.path.isfile(src):
+            print(f'[mount] WARNING: missing {name} source: {src}')
+            continue
+        dst = os.path.join(bin_dir, name)
+        if os.path.abspath(src) != os.path.abspath(dst):
+            shutil.copyfile(src, dst)
+        os.chmod(dst, mode)
+        print(f'[mount] installed {dst} ({os.path.getsize(dst)} bytes)')
+
+
 if __name__ == '__main__':
     patch_bg()
-    patch_player()
+    apply_patches('player', PLAYER_PATCHES)
+    apply_patches('sync', SYNC_PATCHES)
+    apply_patches('mount', MOUNT_PATCHES)
     strip_win32_bindings()
     install_so()
     install_player()
+    install_sync()
+    install_mount()
     print('done')

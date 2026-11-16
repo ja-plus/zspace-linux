@@ -72,7 +72,8 @@ libgbm1, libdrm2, libegl1, libgl1, \
 libasound2t64 | libasound2, \
 libcups2t64 | libcups2, \
 libfontconfig1, libfreetype6, \
-libsecret-1-0, libnotify4, libffi8"
+libsecret-1-0, libnotify4, libffi8, \
+fuse3"
 
 # 首期播放器尚未接入，libvlc/VA-API 放 Recommends；播放器上线后提升为 Depends。
 RECOMMENDS="libvlc5, vlc-plugin-base, vlc-plugin-video-output, \
@@ -152,10 +153,28 @@ real_payload() {
     fi
     [ -f "$player" ] || die "缺少播放器二进制：$player"
 
-    # 幂等补丁：linux dll 分支 + 6 处播放器补丁 + sdk/libzrpc.so + uzplayer
+    # 官方 ZSpaceSync.exe 是 syncthing 1.27.7 的 fork；用上游同版本 Linux 二进制。
+    # 下载物不入库，放在 native/work/syncthing/（已 gitignore）。
+    local sync="$ROOT/native/work/syncthing/syncthing"
+    [ -x "$sync" ] || die "缺少 syncthing 1.27.7：$sync（见 .agents/sources.md）"
+
+    # 挂载线：自研 monitor + 上游 rclone 1.70.2（官方 ZSpaceMount 的 fork 基线）。
+    local monitor="$ROOT/native/mount/target/release/zspace-mount-monitor"
+    if [ ! -f "$monitor" ] && command -v cargo >/dev/null 2>&1; then
+        echo "== 构建 zspace-mount-monitor =="
+        (cd "$ROOT/native/mount" && cargo build --release) || die "挂载 monitor 构建失败"
+    fi
+    [ -f "$monitor" ] || die "缺少挂载 monitor：$monitor"
+    local rclone="$ROOT/native/work/rclone/rclone"
+    [ -x "$rclone" ] || die "缺少 rclone 1.70.2：$rclone（见 .agents/sources.md）"
+
+    # 幂等补丁：linux dll 分支 + 播放器/sync/mount 补丁 +
+    # sdk/libzrpc.so + uzplayer/zspace-player + bin/syncthing +
+    # bin/ZSpaceMountMonitor + bin/ZSpaceMount + bin/filter.txt
     if [ -f "$ROOT/native/patches/patch_app.py" ] && command -v python3 >/dev/null 2>&1; then
         ZS_NODE="$FILES_DIR/electron/electron" \
-            python3 "$ROOT/native/patches/patch_app.py" "$FILES_DIR/app" "${so:-}" "$player"
+            python3 "$ROOT/native/patches/patch_app.py" "$FILES_DIR/app" "${so:-}" \
+            "$player" "$sync" "$monitor" "$rclone"
     fi
 
     # 包内软链接：Electron 用 resourcesPath/app 解析应用名。
@@ -270,6 +289,16 @@ if [ -n "$PAYLOAD_DIR" ]; then
     expect A16 "linux dll 分支已打" grep -q 'linux"==process.platform' "$FILES_DIR/app/background.js"
     expect A17 "zspace-player 随包（uzplayer/）" test -x "$FILES_DIR/app/uzplayer/zspace-player"
     expect A18 "6 处播放器补丁已打" bash -c "[ \"\$(grep -oF 'pkill -x zspace-player' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
+    expect A20 "syncthing 随包（bin/）" test -x "$FILES_DIR/app/bin/syncthing"
+    expect A21 "syncthing 是 ELF" is_elf "$FILES_DIR/app/bin/syncthing"
+    expect A22 "sync 补丁已打" grep -q '"bin","syncthing"' "$FILES_DIR/app/background.js"
+    expect A23 "挂载 monitor 随包（bin/）" test -x "$FILES_DIR/app/bin/ZSpaceMountMonitor"
+    expect A24 "rclone 随包（bin/ZSpaceMount）" test -x "$FILES_DIR/app/bin/ZSpaceMount"
+    expect A25 "挂载 monitor 是 ELF" is_elf "$FILES_DIR/app/bin/ZSpaceMountMonitor"
+    expect A26 "rclone 是 ELF" is_elf "$FILES_DIR/app/bin/ZSpaceMount"
+    expect A27 "mount 补丁已打" grep -q 'MountMoni' "$FILES_DIR/app/background.js"
+    expect A28 "无 Windows mount/sync 产物" bash -c "! dpkg-deb -c '$DEB' | grep -Eiq 'winfsp|mounts3|ZSpaceMount\\.exe|ZSpaceSync\\.exe|\\.msi|fuse-t'"
+    expect A29 "挂载 filter.txt 随包" test -s "$FILES_DIR/app/bin/filter.txt"
 fi
 
 # B. 脚本与 control
@@ -288,6 +317,7 @@ expect B12 "不依赖 Wine" bash -c "! dpkg-deb -f '$DEB' Depends | grep -qi 'wi
 expect B13 "启动器含 ELECTRON_DISABLE_SANDBOX" grep -q 'ELECTRON_DISABLE_SANDBOX=1' "$FILES_DIR/run.sh"
 expect B14 "启动器 unset NODE_OPTIONS" grep -q 'NODE_OPTIONS' "$FILES_DIR/run.sh"
 expect B15 "启动器清理代理变量" grep -q 'no_proxy=' "$FILES_DIR/run.sh"
+expect B16 "Depends 含 fuse3" bash -c "dpkg-deb -f '$DEB' Depends | grep -q 'fuse3'"
 
 # C. 红线
 expect C1 "无 chmod 4755 / chown root" bash -c "! grep -REq 'chmod[[:space:]]+4755|chown[[:space:]]+root' '$CTRL_DIR' '$FILES_DIR/run.sh' '$STAGE/usr/bin/$PKG'"

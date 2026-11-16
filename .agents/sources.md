@@ -85,3 +85,29 @@ zspace_windows_*.exe            NSIS 安装包（约 321 MB）
 | V2.46.2026101501 | 2026-10-21 11:13:11 | 有（packages/） |
 
 > 有新版本时**追加一行**，不要改历史记录。
+
+## 6. 同步运行时（syncthing）
+
+- 官方 `resources/app.asar.unpacked/bin/ZSpaceSync.exe` 是 syncthing
+  **v1.27.7** 的 fork（`bin/version.txt` = `v1.27.7-xnas-c20260624135721`）。
+- 本项目使用上游同版本 Linux amd64：
+  `https://github.com/syncthing/syncthing/releases/download/v1.27.7/syncthing-linux-amd64-v1.27.7.tar.gz`
+- SHA256：`068f3cf972113d101666678dd7b043d9363356667b8c4a81c84b1b54d4d342c3`
+- 下载脚本：`scripts/fetch_syncthing.sh`；落盘 `native/work/syncthing/syncthing`
+  （`native/work/` 已 gitignore，不入库）。
+- 不要用 2.x：配置/数据库会迁移，与官方 fork 不兼容。
+
+## 7. 挂载运行时（rclone）
+
+- 官方 `bin/ZSpaceMount.exe` 是 rclone **v1.70.2** 的 fork
+  （`v1.70.2-20250702150924-windows-amd64`，tags cmount）。
+- 本项目使用上游同版本 Linux amd64：
+  `https://downloads.rclone.org/v1.70.2/rclone-v1.70.2-linux-amd64.zip`
+- zip SHA256：`7bfa813f426820d20436e48a4e0b9bf21977fcd513a48f2d28eede3136b4bacb`
+- 二进制 SHA256：`d1d99f58c1ad31592caa093eb400607725afd74eb3655bdeb6dc1886fed8fda8`
+- 下载脚本：`scripts/fetch_rclone.sh`；落盘 `native/work/rclone/rclone`
+  （`native/work/` 已 gitignore，不入库）。
+- 官方 `bin/filter.txt`（50 条排除规则）随包：
+  `packaging-native/mount-filter.txt`。
+
+

@@ -39,11 +39,32 @@ if [ ! -f "$PLAYER" ] && command -v cargo >/dev/null 2>&1; then
     (cd "$HERE/player" && cargo build --release) || { echo "player build failed"; exit 1; }
 fi
 
+# Upstream syncthing 1.27.7 (the official ZSpaceSync.exe is a fork of it).
+# Binary is not committed; put it in native/work/syncthing/syncthing.
+SYNC="$WORK/syncthing/syncthing"
+if [ ! -x "$SYNC" ]; then
+    echo "warning: syncthing not found at $SYNC; sync feature will be unavailable" >&2
+fi
+
+# Mount line: our monitor + upstream rclone 1.70.2 (official ZSpaceMount fork).
+MOUNT="$HERE/mount/target/release/zspace-mount-monitor"
+if [ ! -f "$MOUNT" ] && command -v cargo >/dev/null 2>&1; then
+    echo "== building zspace-mount-monitor =="
+    (cd "$HERE/mount" && cargo build --release) || { echo "mount monitor build failed"; exit 1; }
+fi
+RCLONE="$WORK/rclone/rclone"
+if [ ! -x "$RCLONE" ]; then
+    echo "warning: rclone not found at $RCLONE; mount feature will be unavailable" >&2
+fi
+
 if [ -d "$APP" ]; then
     # Electron doubles as Node for the background.js syntax check.
     [ -x "$ELECTRON" ] && export ZS_NODE="$ELECTRON"
-    # Idempotent: dll branch + 6 player patches + sdk/libzrpc.so + uzplayer/zspace-player
+    # Idempotent: dll branch + player/sync/mount patches + sdk/libzrpc.so +
+    # uzplayer/zspace-player + bin/syncthing + bin/ZSpaceMountMonitor +
+    # bin/ZSpaceMount + bin/filter.txt
     python3 "$HERE/patches/patch_app.py" "$APP" "${SO:-}" "${PLAYER:-}" \
+        "${SYNC:-}" "${MOUNT:-}" "${RCLONE:-}" \
         || { echo "app patch failed"; exit 1; }
 else
     echo "warning: $APP missing; app not patched" >&2

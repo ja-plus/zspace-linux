@@ -1,0 +1,15 @@
+[package]
+name = "zspace-mount-monitor"
+version = "1.1.1"
+edition = "2021"
+description = "Linux replacement for the official ZSpaceMountMonitor (mountV2 orchestration CLI)"
+license = "MIT"
+
+[[bin]]
+name = "zspace-mount-monitor"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

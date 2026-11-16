@@ -1199,3 +1199,56 @@
   断言 `/splay/QUALITY/...` 与 `sub-search.srt` 实际拉取；`cargo test` 9/9，
   端到端 **45/45**。产物 994,352 B，SHA256 3da8ec38cd3656bda9c795b9513c1062775f59a9…。
 - 未执行 git；未改 `native/patches/`、`native/run-native.sh`。
+
+## 2026-11-16 同步线：上游 syncthing 1.27.7 接入
+
+- 官方 `ZSpaceSync.exe` = syncthing v1.27.7 fork（`bin/version.txt` =
+  `v1.27.7-xnas-c20260624135721`）；REST/API key 与上游一致。
+- 上游二进制：`syncthing-linux-amd64-v1.27.7.tar.gz`
+  SHA256 `068f3cf972113d101666678dd7b043d9363356667b8c4a81c84b1b54d4d342c3`
+  → `native/work/syncthing/syncthing`（gitignore，不入库）；
+  下载脚本 `scripts/fetch_syncthing.sh`（固定版本+校验和）。
+- 官方启动链（代码 + 实机进程确认）：
+  - bin：`<app>/bin/ZSpaceSync.exe`
+  - config：`<userData>/<username>[_<nasId>]/.config`
+  - 生成：`-no-browser -generate=<configPath>`（STNODEFAULTFOLDER=1）
+  - 启动：`--no-browser --home=... --logfile=... --log-max-old-files=1
+    --log-max-size=52428800 --allow-newer-config`，STTRACE=model versioner fs api
+  - GUI/data 端口 8384/22000，getPortAndKey 自动找空闲并改写 127.0.0.1；
+  - key = md5(username+"zspace")[:16]，渲染器用
+    `http://127.0.0.1:<localApiPort>` + `X-API-Key: <localApiKey>`。
+- 补丁（`native/patches/patch_app.py`，幂等）：
+  sync-bin（bin/syncthing）、sync-generate（Linux 用 `generate --home=`）、
+  sync-log-date（上游 `YYYY-MM-DD` 日志）；安装 `APP/bin/syncthing` 0755。
+- 构建：`build_native_deb.sh` 缺失 syncthing 直接失败；新增 A20/A21/A22。
+  `run-native.sh` 缺失只告警。规格：`native/sync/PATCH-SPEC.md`。
+- 验证：按官方参数起本地实例，`/rest/system/status` 带 key 200、不带 403；
+  新增文件夹后 `/rest/db/status?folder=test` 200；按 app 的
+  initConfigContent/key 改写后再跑一遍同样通过。
+  测试构建（/tmp/syncbuild，native.5）A1–A22 全过，包 103.7MB。
+- 待实测：登录后官方同步界面联调、真实 NAS 设备/目录握手。
+- 未改 `native/mount/`；未提交（等挂载线一起）。
+
+## 2026-11-16 挂载线接入 + 产物 native.6
+
+- 运行时：自研 `zspace-mount-monitor` → `app/bin/ZSpaceMountMonitor`；
+  上游 rclone **v1.70.2** → `app/bin/ZSpaceMount`；官方 `filter.txt`
+  → `app/bin/filter.txt`；`scripts/fetch_rclone.sh` 固定 zip/二进制 SHA。
+- 补丁（`patch_app.py`，幂等）：
+  1. `mount-no-exe`：Linux 不追加 `.exe`（bin 名无后缀）。
+  2. `mount-kill-comm`：`/proc/<pid>/comm` 截断为 15 字符
+     （monitor = `ZSpaceMountMoni`），卸载时按 `MountMoni` 识别 monitor。
+- 启动/打包：`run-native.sh` 缺 monitor/rclone 只告警；
+  `build_native_deb.sh` 缺则失败；`Depends` 增加 `fuse3`；
+  新增 A23–A29（monitor/rclone 随包+ELF、mount 补丁、无 Windows
+  WinFsp/mounts3/ZSpaceMount.exe、filter.txt）与 B16（Depends 含 fuse3）。
+- 验证：`native/mount/selftest/run_selftest.sh` **16/16**；
+  monitor `fuse --status`/`check`/`process --list` 本机返回正常；
+  native.6 自检 A1–A29/B1–B16/C1–C6 全过。
+- 产物 native.6：
+  `build/com.zspace.native.spark_2.46.2026101501+native.6-1_amd64.deb`
+  117,354,480 B；Installed-Size 421,520 KiB；
+  SHA256 `e3de02a73343010e31fadfc3004d53e004b385452b2b7be25c5674f58a13b9ae`。
+- 待实测：真实 NAS 的挂载读写/卸载、登录后同步界面、安装启动（C1/C2）。
+- 登录实测清单：`docs/LOGIN-TEST-CHECKLIST.md`（native.6 路径/日志/命令）。
+
