@@ -9,7 +9,7 @@ Icon=com.zspace.native.spark
 Terminal=false
 Categories=Network;FileTransfer;
 Keywords=zspace;极空间;nas;cloud;
-# 原生 Electron 的 WM_CLASS 预期是 electron；首次运行后用
-# `xprop WM_CLASS` 复核，若不同再改成实际值（不影响安装，只影响 Dock 图标匹配）。
-StartupWMClass=electron
+# 实测主窗口 WM_CLASS = ("zspace", "zspace")；写 electron 会导致 Dock
+# 匹配不到本条目，回落到齿轮图标。
+StartupWMClass=zspace
 StartupNotify=true

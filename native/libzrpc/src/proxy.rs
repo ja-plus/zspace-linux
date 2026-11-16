@@ -20,7 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 struct Proxy {
     stop: Arc<AtomicBool>,
-    _thread: JoinHandle<()>,
+    thread: Option<JoinHandle<()>>,
 }
 
 static PROXIES: OnceLock<Mutex<HashMap<u16, Proxy>>> = OnceLock::new();
@@ -108,7 +108,7 @@ pub fn start(local_port: u16, target: String) -> std::io::Result<()> {
             }
         }
     });
-    proxies().lock().unwrap().insert(local_port, Proxy { stop, _thread: thread });
+    proxies().lock().unwrap().insert(local_port, Proxy { stop, thread: Some(thread) });
     Ok(())
 }
 
@@ -142,7 +142,7 @@ pub fn start_tunnel(local_port: u16, params: crate::relay::ConnectParams) -> std
             Err(_) => break,
         }
     });
-    proxies().lock().unwrap().insert(local_port, Proxy { stop, _thread: thread });
+    proxies().lock().unwrap().insert(local_port, Proxy { stop, thread: Some(thread) });
     Ok(())
 }
 
@@ -192,15 +192,32 @@ fn handle_tunnel(local: TcpStream, params: &crate::relay::ConnectParams) -> std:
     Ok(())
 }
 
-pub fn stop(local_port: u16) {    if let Some(p) = proxies().lock().unwrap().remove(&local_port) {
+/// Stop a proxy and wait for its listener thread to exit.
+///
+/// The listener is owned by the thread closure, so returning before the thread
+/// exits leaves the socket open. The app calls stop_all_service and then
+/// immediately starts the web proxy on the same port; without joining, the new
+/// bind hits EADDRINUSE (os error 98).
+pub fn stop(local_port: u16) {
+    let p = proxies().lock().unwrap().remove(&local_port);
+    if let Some(mut p) = p {
         p.stop.store(true, Ordering::Relaxed);
+        if let Some(t) = p.thread.take() {
+            let _ = t.join();
+        }
     }
 }
 
 pub fn stop_all() {
-    let mut map = proxies().lock().unwrap();
-    for (_, p) in map.drain() {
+    let drained: Vec<Proxy> = {
+        let mut map = proxies().lock().unwrap();
+        map.drain().map(|(_, p)| p).collect()
+    };
+    for mut p in drained {
         p.stop.store(true, Ordering::Relaxed);
+        if let Some(t) = p.thread.take() {
+            let _ = t.join();
+        }
     }
 }
 
@@ -435,6 +452,19 @@ mod tests {
         let p = l.local_addr().unwrap().port();
         drop(l);
         p
+    }
+
+    /// Regression: the app stops the login proxy and immediately starts the web
+    /// proxy on the same port. stop() must release the listener before it
+    /// returns, otherwise the rebind fails with EADDRINUSE.
+    #[test]
+    fn restart_same_port_releases_listener() {
+        let lport = free_port();
+        start(lport, "http://127.0.0.1:1".into()).unwrap();
+        start(lport, "http://127.0.0.1:1".into()).expect("rebind same port");
+        stop(lport);
+        let probe = TcpListener::bind(("127.0.0.1", lport)).expect("port still held after stop");
+        drop(probe);
     }
 
     /// 206 must keep Content-Range/ETag/Content-Length and stream (no buffering).

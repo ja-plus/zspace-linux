@@ -1269,3 +1269,32 @@
   `Name[en]=ZSpace`，`Comment=极空间私有云客户端`，control
   `Description: 极空间私有云客户端`、长描述去掉「Linux 构建」。
   两版并存时菜单同名条目用户明确接受，不再做区分。标识字段不动。
+
+
+## 2026-11-16 登录卡「正在连接设备」+ Dock 齿轮图标（native.7）
+
+- 现象：登录 200 后停在 `#/entry`「正在连接设备」，50s 后才会变错误；
+  Dock 图标是齿轮。
+- 根因 1（bind 竞态）：主进程 `startWebProxy()` 在 `libzrpc_stop_all_service()`
+  之后 **7ms** 就调用 `start_service` 复用 13579。旧 `proxy::stop*` 只置标志、
+  不 join 监听线程（30ms 轮询），端口尚未释放 → `EADDRINUSE (os error 98)`。
+  `we()` 仅在 `code==200` 时设置 `pe`（proxyHost），失败则 `pe=""`；
+  渲染器 `checkProxy()` 要求 `status && host`，永远等不到 → 一直转圈。
+  同时 `global.ApiHost=""`，tray 弹窗与 sync API（`127.0.0.1:80`）一起坏掉。
+- 修复：`proxy::Proxy.thread: Option<JoinHandle>`；`stop()` / `stop_all()`
+  置标志后 **join** 线程，确保返回前监听 socket 已关闭。新增回归测试
+  `proxy::tests::restart_same_port_releases_listener`。
+- 根因 2（Dock 图标）：实测主窗口
+  `WM_CLASS = ("zspace", "zspace")`（窗口 134217774，标题「极空间 - 家庭私有云」），
+  desktop 里猜的 `StartupWMClass=electron` 匹配不到 → DDE 回落齿轮。
+  改为 `StartupWMClass=zspace`；Wine 条目是 `Wine`，不冲突。
+  主窗口无 `_NET_WM_ICON`（官方未设），图标由 desktop `Icon=` 提供。
+- 产物 native.7：
+  `build/com.zspace.native.spark_2.46.2026101501+native.7-1_amd64.deb`
+  117,350,000 B；Installed-Size 421,532 KiB；
+  SHA256 `4abc09d690f89d14768b15705d6703fa0c9906485cbeeb53d87c80a8f4ae3a16`；
+  自检 A1–A29 / B1–B16 / C1–C6 全过；desktop 已是 `Name=极空间` +
+  `StartupWMClass=zspace`。
+- 遗留：同步停止仍走 `taskkill`（Linux 必失败），退出后 syncthing 可能残留；
+  `get_nas_status.connected` 目前只在有在途连接时为 true（heartbeat 期间），
+  暂未改语义，登录后继续观察。
