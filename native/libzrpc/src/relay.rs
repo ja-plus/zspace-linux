@@ -1290,7 +1290,7 @@ mod tests {
         let c = CString::new(b64).unwrap();
         let out = crate::ffi::libzrpc_start_service(c.as_ptr());
         let res = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
-        assert!(res.contains("\"code\":200"), "start_service -> {res}");
+        assert!(res.contains("\"code\":\"200\""), "start_service -> {res}");
 
         let mut s = TcpStream::connect(("127.0.0.1", local_port)).unwrap();
         s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();

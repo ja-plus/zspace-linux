@@ -64,7 +64,7 @@ unsafe fn arg_str(p: *const c_char) -> String {
     }
 }
 
-fn log(msg: &str) {
+pub(crate) fn log(msg: &str) {
     let path = state().lock().unwrap().log_path.clone();
     let line = format!("[libzrpc-native] {msg}\n");
     if !path.is_empty() {
@@ -192,7 +192,9 @@ pub extern "C" fn libzrpc_start_service(enc_cfg: *const c_char) -> *const c_char
                     "start_service: relay tunnel 127.0.0.1:{local_port} -> nas {nas_id:?}"
                 ));
                 ret_string(json!({
-                    "code": 200,
+                    // Official returns the code as a string here: the sync path
+                    // checks `"200"===o.code` (strict) before parsing data.host.
+                    "code": "200",
                     "data": {
                         "host": format!("127.0.0.1:{local_port}"),
                         "port": local_port,
@@ -218,9 +220,9 @@ pub extern "C" fn libzrpc_start_service(enc_cfg: *const c_char) -> *const c_char
         Ok(_) => {
             state().lock().unwrap().started = true;
             log(&format!("proxy 127.0.0.1:{local_port} -> {target}"));
-            // App expects code:200 and data.host="ip:port", data.port, data.id.
+            // App expects code:"200" and data.host="ip:port", data.port, data.id.
             ret_string(json!({
-                "code": 200,
+                "code": "200",
                 "data": {
                     "host": format!("127.0.0.1:{local_port}"),
                     "port": local_port,

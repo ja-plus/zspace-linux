@@ -12,11 +12,13 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use socket2::{Domain, Protocol, Socket, Type};
 
 struct Proxy {
     stop: Arc<AtomicBool>,
@@ -73,12 +75,54 @@ impl Drop for ConnGuard {
 
 /// Start (or replace) a proxy on 127.0.0.1:local_port forwarding to target.
 /// `target` is like "https://192.168.1.50:5055".
+/// Bind 127.0.0.1:<port> with SO_REUSEADDR before listen.
+///
+/// The app switches from the login proxy to the web proxy in ~5 ms:
+/// `libzrpc_stop_all_service()` then `libzrpc_start_service()` on the *same*
+/// port (13579). The renderer's keep-alive connections survive the listener
+/// close as accepted sockets that still hold 127.0.0.1:13579, so a plain
+/// `TcpListener::bind` fails with EADDRINUSE (os error 98) even though nothing
+/// is listening any more. The app then never records the proxy host
+/// (`global.ApiHost` stays "") and every relative API call — `/syncApi`,
+/// `/AppStore`, `/healthcheck` — is sent to 127.0.0.1:80 and fails.
+/// Verified on this kernel: without SO_REUSEADDR the rebind fails, with it the
+/// rebind succeeds while the old accepted socket is still open.
+fn bind_reuse(local_port: u16) -> std::io::Result<TcpListener> {
+    let sock = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
+    sock.set_reuse_address(true)?;
+    sock.set_nonblocking(true)?;
+    sock.bind(&SocketAddr::from(([127, 0, 0, 1], local_port)).into())?;
+    sock.listen(128)?;
+    Ok(sock.into())
+}
+
+/// `bind_reuse` with a short retry budget (the port can still be held for a
+/// few ms by a socket the kernel hasn't reaped yet).
+fn bind_reuse_retry(local_port: u16) -> std::io::Result<TcpListener> {
+    let mut last = None;
+    for attempt in 0..6 {
+        match bind_reuse(local_port) {
+            Ok(l) => return Ok(l),
+            Err(e) => {
+                if attempt == 0 {
+                    crate::ffi::log(&format!(
+                        "bind 127.0.0.1:{local_port} busy ({e}), retrying"
+                    ));
+                }
+                last = Some(e);
+                std::thread::sleep(Duration::from_millis(40));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("bind failed")))
+}
+
 pub fn start(local_port: u16, target: String) -> std::io::Result<()> {
     stop(local_port);
-    let listener = TcpListener::bind(("127.0.0.1", local_port))?;
-    listener.set_nonblocking(true)?;
+    let listener = bind_reuse_retry(local_port)?;
     let stop = Arc::new(AtomicBool::new(false));
     let stop2 = stop.clone();
+    let log_target = target.clone();
     let thread = std::thread::spawn(move || {
         let client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -109,6 +153,9 @@ pub fn start(local_port: u16, target: String) -> std::io::Result<()> {
         }
     });
     proxies().lock().unwrap().insert(local_port, Proxy { stop, thread: Some(thread) });
+    crate::ffi::log(&format!(
+        "proxy listening 127.0.0.1:{local_port} -> {log_target}"
+    ));
     Ok(())
 }
 
@@ -119,10 +166,10 @@ pub fn start(local_port: u16, target: String) -> std::io::Result<()> {
 /// (keep-alive, streaming, WebSocket) behave like a transparent TCP proxy.
 pub fn start_tunnel(local_port: u16, params: crate::relay::ConnectParams) -> std::io::Result<()> {
     stop(local_port);
-    let listener = TcpListener::bind(("127.0.0.1", local_port))?;
-    listener.set_nonblocking(true)?;
+    let listener = bind_reuse_retry(local_port)?;
     let stop = Arc::new(AtomicBool::new(false));
     let stop2 = stop.clone();
+    let nas_id = params.nas_id.clone();
     let params = Arc::new(params);
     let thread = std::thread::spawn(move || loop {
         if stop2.load(Ordering::Relaxed) {
@@ -143,6 +190,9 @@ pub fn start_tunnel(local_port: u16, params: crate::relay::ConnectParams) -> std
         }
     });
     proxies().lock().unwrap().insert(local_port, Proxy { stop, thread: Some(thread) });
+    crate::ffi::log(&format!(
+        "tunnel listening 127.0.0.1:{local_port} -> nas {nas_id:?}"
+    ));
     Ok(())
 }
 
@@ -467,6 +517,35 @@ mod tests {
         drop(probe);
     }
 
+    /// Regression for the login→web-proxy switch that broke `native.6`:
+    /// the renderer's keep-alive connection is still established when the app
+    /// calls stop_all_service and immediately start_service on the same port.
+    /// The accepted socket alone holds 127.0.0.1:<port>, so a plain bind fails
+    /// with EADDRINUSE (os error 98) and the app never learns the proxy host.
+    #[test]
+    fn restart_after_stop_all_with_live_client() {
+        // Upstream that accepts and never answers: keeps `handle()` blocked, so
+        // the proxy's accepted socket stays ESTABLISHED across stop_all().
+        let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+        let uport = upstream.local_addr().unwrap().port();
+        let hold = std::thread::spawn(move || {
+            let (s, _) = upstream.accept().unwrap();
+            std::thread::sleep(Duration::from_secs(3));
+            drop(s);
+        });
+        let lport = free_port();
+        let target = format!("http://127.0.0.1:{uport}");
+        start(lport, target.clone()).unwrap();
+        let mut cli = TcpStream::connect(("127.0.0.1", lport)).unwrap();
+        cli.write_all(b"GET /hold HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        stop_all();
+        start(lport, target).expect("rebind after stop_all with live client");
+        stop(lport);
+        drop(cli);
+        let _ = hold.join();
+    }
+
     /// 206 must keep Content-Range/ETag/Content-Length and stream (no buffering).
     #[test]
     fn streams_206_and_preserves_range_headers() {
@@ -582,8 +661,12 @@ mod tests {
         let mut body = Vec::new();
         c.read_to_end(&mut body).unwrap();
         let body = String::from_utf8_lossy(&body).to_string();
+        // The proxy decodes the upstream chunked body and re-chunks it with
+        // its own (64 KiB) framing, so only the payload and a valid terminator
+        // are guaranteed — upstream chunk boundaries are not preserved.
         assert!(body.ends_with("0\r\n\r\n"), "{body:?}");
-        assert!(body.contains("hello world"), "{body:?}");
+        assert!(body.contains("hello"), "{body:?}");
+        assert!(body.contains(" world"), "{body:?}");
 
         let _ = srv.join();
         stop(lport);

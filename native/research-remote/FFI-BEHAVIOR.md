@@ -81,6 +81,15 @@
 两条分支的数值/文案。它们需要改主机解析或断网才能复现，本轮未改系统配置；
 本实现按同一张官方 suggest 表填入，**数值待真机确认**。
 
+## start_service
+
+`libzrpc_start_service` 返回的 `code` 是**字符串** `"200"`，不是数字。
+证据：`background.js` 的同步取端口逻辑 `Fe.startService()` 用严格比较
+`if("200"===o.code) return parseInt(o.data.host.split(":")[1])`。
+数字 200 会让它返回 undefined，同步设备地址写成
+`tcp://127.0.0.1:undefined`（真机日志已复现）。
+Web 代理路径用宽松比较 `200==h.code`，字符串同样兼容。
+
 ## 代码与测试
 
 - `native/libzrpc/src/ffi.rs`：四个函数按上表实现；`get_nas_status` 去掉 `online`。

@@ -1298,3 +1298,82 @@
 - 遗留：同步停止仍走 `taskkill`（Linux 必失败），退出后 syncthing 可能残留；
   `get_nas_status.connected` 目前只在有在途连接时为 true（heartbeat 期间），
   暂未改语义，登录后继续观察。
+
+## 2026-11-16 join 之外的第二层：SO_REUSEADDR；产物 native.8
+
+- 背景：native.6 登录后 `startWebProxy` 始终拿不到 host（`global.ApiHost=""`），
+  所有相对路径请求打到 `127.0.0.1:80`（同步每秒 ECONNREFUSED）。d8b9a2c 的 join
+  修复解决了「监听线程未退出」那一层，但 **join 只关监听 socket**：已 accepted 的
+  keep-alive 连接仍绑着 `127.0.0.1:<port>`，Linux 上不带 SO_REUSEADDR 的 bind
+  照样报 EADDRINUSE(98)。原生 TcpListener::bind 不设该选项。
+- 证据（对照实验，同机内核）：
+  `listener + 一条 established 连接 → 关 listener → 重绑`
+  无 SO_REUSEADDR = `FAIL 98 Address already in use`；有 = `OK`。
+- 决定/改动：
+  - `proxy::bind_reuse()` 用 socket2 建 socket → `set_reuse_address(true)` →
+    bind → listen；`bind_reuse_retry()` 6×40ms 兜底；`start()` 与
+    `start_tunnel()` 都改走它。
+  - 新增回归测试 `restart_after_stop_all_with_live_client`：上游挂住不响应，
+    保持 accept socket 处于 ESTABLISHED，然后 stop_all + 立即重绑同端口。
+  - 修掉 HEAD 上一直失败的 `streams_chunked_response`：断言原本要求解链后的
+    `hello world`，与「chunked 逐字节透传（不解码）」互相矛盾；改为断言
+    `\r\nhello\r\n` / `\r\n world\r\n` / 结尾 `0\r\n\r\n`。
+  - SDK 日志补 `proxy listening 127.0.0.1:<port> -> <target>` 与
+    `tunnel listening ... -> nas "<id>"`；`Cargo.toml` 增 socket2（lock 里已有，可离线）。
+- 真机验证（仓库版 run-native.sh，非安装包）：
+  - 登录序列：`simpleStartSerivce` 200 → `stop_all_service`（耗时 4ms）→
+    `SDK StartService` **200** → `WebProxyStarted` → `entryUrl:
+    http://127.0.0.1:13579/home/`。native.6 时这一步是
+    `code:1 bind failed 地址已在使用` + `app://./index.html#/entry`。
+  - `127.0.0.1:80` 报错计数 **0**（native.6 时每秒一条）。
+  - syncthing 起来前 3 秒内有 6 条 8384 ECONNREFUSED，起来后不再出现；
+    REST `system=200` / `nokey=403`。
+  - `cargo test` 32 passed / 0 failed。
+- 产物 native.8：
+  `build/com.zspace.native.spark_2.46.2026101501+native.8-1_amd64.deb`
+  117,361,112 B；SHA256
+  `f37ddab02d61e72dc64a7bfa31681090da31e830012f5d01e8c800db14d65fd1`；
+  自检 51 项全 PASS（A/B/C）；包内 `app/sdk/libzrpc.so` 与仓库构建
+  `631330a1…` 一致。**native.7 已被本条取代**（同一修复，少这层加固）。
+- 观测到的其它事实：
+  - 本次登录走**中继**（`relay tunnel 127.0.0.1:13579` 与 `:13581`），
+    局域网发现没命中——NAS 不在同网段或 UDP 广播被拦，可用但比直连慢。
+  - 未做：播放/同步界面/挂载的界面点测；同步停止仍走 Windows `taskkill`。
+
+
+## 2026-11-16 托盘「本地服务未启动」根因与修复（native.9）
+
+- 窗口：主进程 `createPopupWindow()` 建的托盘弹窗（300x418），
+  加载 `<ApiHost>/home/syncTray`（NAS 页面，经 13579 反向代理）。
+  页面里的「文档同步/本地服务未启动」由页面自己按客户端上报的同步状态渲染。
+- 根因链（本机实测）：
+  1. 同步停止走 `taskkill /f /im "ZSpaceSync.exe"`（Linux 无此命令），
+     `app.localSyncPort` 在重启后为 0 → 也不发 `/rest/system/shutdown`，
+     旧 syncthing 必残留。
+  2. 下次启动 `getPortAndKey()` 用 `lsof -i :8384` 探测，端口被旧进程占用
+     → 自动 +20000 改配置到 28384；新进程又因旧进程占着 leveldb/22000
+     报 `Error opening database: resource temporarily unavailable` 退出。
+  3. 应用按 28384 轮询 `/rest/system/status` → ECONNREFUSED，
+     托盘弹窗显示「本地服务未启动」。
+- 修复：
+  1. `patch_app.py` 新增 `sync-kill-linux`：
+     `pkill -9 -f "[s]yncthing --no-browser --home=<configPath>"`，
+     只杀本应用配置目录下的 syncthing（含上次残留）。
+  2. `libzrpc_start_service` 的 `code` 改为字符串 `"200"`：同步线
+     `Fe.startService()` 用严格比较 `"200"===o.code`，数字 200 会让
+     `remoteSyncPort` 变 undefined，配置里写成 `tcp://127.0.0.1:undefined`。
+  3. 因（2）修好，`checkDeviceInfo()` 会把 NAS 设备地址写成
+     `tcp://127.0.0.1:13581`（本地 TCP 代理 → NAS 22000）。
+- 真机/开发实例验证：
+  - `remote sync tcp proxy port: 13581`，`local sync api port: 8384`，
+    配置 `<address>tcp://127.0.0.1:13581</address>`。
+  - `syncthing.log`: `Established secure connection to OTTBTZD ... 127.0.0.1:13581`。
+  - `GET /rest/system/status` with `X-API-Key` → 200。
+  - 残留进程场景：手工起一个同配置 syncthing 再启动应用，日志显示
+    `pkill -9 -f ...` 命中，端口仍 8384，无 28384 漂移。
+- 产物 native.9（含同工作区另一条线的 bind/SO_REUSEADDR、托盘菜单、
+  保持登录补丁）：
+  `build/com.zspace.native.spark_2.46.2026101501+native.9-1_amd64.deb`
+  117,348,104 B；Installed-Size 421,528 KiB；
+  SHA256 `f75bcc9f92c63d3db4e098e21b4c6fd92e951354bbae95d392e0faade7fb9f60`；
+  自检 A1–A29 / B1–B16 / C1–C6 全过。

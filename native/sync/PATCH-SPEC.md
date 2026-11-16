@@ -40,10 +40,22 @@
 | sync-bin | `this.binPath=U.a.join(__dirname,"bin",nt).replace("app.asar","app.asar.unpacked");` | 追加 `"linux"==process.platform&&(this.binPath=U.a.join(__dirname,"bin","syncthing"));` |
 | sync-generate | `["-no-browser","-generate="+this.configPath]` | `"linux"==process.platform?["generate","--home="+this.configPath]:["-no-browser","-generate="+this.configPath]` |
 | sync-log-date | `/^(\d+\/\d+\/\d+ \d+:\d+:\d+)/` | `/^(\d+[\/-]\d+[\/-]\d+ \d+:\d+:\d+)/`（上游日志是 `YYYY-MM-DD`） |
+| sync-kill-linux | ``t=Ze?`killall -9 "${nt}"`:`taskkill /f /im "${nt}"` `` | Linux：``pkill -9 -f "[s]yncthing --no-browser --home=${this.configPath}"`` |
+
+`sync-kill-linux` 的原因：官方只会在 Windows/macOS 上杀 `ZSpaceSync.exe`，
+Linux 下 `taskkill` 不存在、`killall ZSpaceSync` 也匹配不到 `syncthing`，
+旧进程残留会让下一次启动把 GUI 端口 +20000（8384→28384）并因 leveldb
+被占用而启动失败，托盘弹窗停在「本地服务未启动」。按 `--home` 配置路径
+匹配，可以同时清掉上次运行留下的残留实例。
 
 `sync-generate` 的原因：上游 Linux 不接受单横线长参数
 （`-no-browser` 会被当成 `-n`），生成配置要用 `generate --home=...`。
 启动参数本身是双横线，无需改。
+
+另外，`libzrpc_start_service` 的 `code` 必须是**字符串** `"200"`：
+同步线 `Fe.startService()` 用严格比较 `"200"===o.code`，数字 200 会让
+`remoteSyncPort` 变成 undefined，配置里写成
+`tcp://127.0.0.1:undefined`，同步设备永远连不上。
 
 ## 3. 安装位置
 

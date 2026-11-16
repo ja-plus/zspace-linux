@@ -129,6 +129,15 @@ SYNC_PATCHES = [
     ("sync-log-date",
      '/^(\\d+\\/\\d+\\/\\d+ \\d+:\\d+:\\d+)/',
      '/^(\\d+[\\/-]\\d+[\\/-]\\d+ \\d+:\\d+:\\d+)/'),
+    # The official build kills its Windows binary (ZSpaceSync.exe) with
+    # taskkill/killall; our process is `syncthing`, so nothing dies and the
+    # next start bumps the API port (8384 -> 28384) while the orphan keeps the
+    # old one, leaving the tray popup at "本地服务未启动". Kill by the config
+    # path so instances left over from a previous app run are cleaned too.
+    ("sync-kill-linux",
+     't=Ze?`killall -9 "${nt}"`:`taskkill /f /im "${nt}"`',
+     't="linux"==process.platform?`pkill -9 -f "[s]yncthing --no-browser --home=${this.configPath}"`'
+     ':Ze?`killall -9 "${nt}"`:`taskkill /f /im "${nt}"`'),
 ]
 
 # mountV2: monitor/rclone live in <app>/bin. On Linux drop the .exe suffix and
@@ -141,6 +150,111 @@ MOUNT_PATCHES = [
      'e.name.indexOf("MountMonitor")>-1?n=e.pid:e.name.indexOf("Mount")>-1&&(o=e.pid)',
      'e.name.indexOf("MountMonitor")>-1||"linux"==process.platform&&e.name.indexOf("MountMoni")>-1'
      '?n=e.pid:e.name.indexOf("Mount")>-1&&(o=e.pid)'),
+]
+
+
+# Tray: on Linux Electron talks StatusNotifier/AppIndicator, which never emits
+# "right-click" and ignores popUpContextMenu() — a menu only shows when it is
+# attached with setContextMenu(). Attach the same template the right-click
+# handler builds, and rebuild it when the login state flips (menu labels cannot
+# be dynamic, they are snapshotted at build time).
+#
+# NOTE: inside createTray() the identifier `r` is `this.exitApp`, NOT the
+# logger (`r.a` lives in other scopes). Logging with r.a here throws
+# "Cannot read properties of undefined (reading 'info')", which aborts
+# createTray() before any tray.on(...) is registered — that is exactly the
+# "tray right-click does nothing" bug. Use console.log instead.
+TRAY_PATCHES = [
+    ("tray-linux-menu",
+     'this.tray.on("right-click",()=>{',
+     '"linux"==process.platform&&(()=>{let last=null,'
+     'mk=()=>{let e=""!=a.a.state.user.token,t=[...l];'
+     'e&&t.push({label:Ue.__("common_button_sign_out"),click(){'
+     'let i=a.a.state.user.loginInfo;s(i.remember&&!i.lockNow)}});'
+     'try{this.tray.setContextMenu(i.Menu.buildFromTemplate(t)),last=e,'
+     'console.log("[tray] linux menu set login="+e)}catch(x){'
+     'console.log("[tray] linux menu failed: "+x.message)}};'
+     'try{mk(),setInterval(()=>{(""!=a.a.state.user.token)!==last&&mk()},2e3)}'
+     'catch(x){console.log("[tray] linux menu init failed: "+x.message)}})()'
+     ',this.tray.on("right-click",()=>{'),
+    # Linux: the tray backend does not emit "double-click"; two fast clicks are
+    # what the user does. Treat the 2nd click within the DE double-click window
+    # as a double-click and show the main window.
+    ("tray-linux-doubleclick",
+     'this.tray.on("click",e=>{e&&e.preventDefault&&e.preventDefault(),o=!1,',
+     'this.tray.on("click",e=>{e&&e.preventDefault&&e.preventDefault(),'
+     '"linux"==process.platform&&(()=>{let n=Date.now();'
+     'if(n-(this.__lc||0)<400){this.__lc=0,o=!0,'
+     'console.log("[tray] double-click -> show app"),c()}else this.__lc=n})(),'
+     'o=!1,'),
+    # 快捷笔记: the page sends "rightclick" on mousedown; main pops a native menu.
+    # Two Linux problems: (1) the memo window is alwaysOnTop, so the menu is
+    # drawn *behind* it and never visible — drop the flag while the menu is
+    # open and restore it in the popup callback; (2) do NOT defer the popup:
+    # deferring lets the page's mouseup run its "expand" toggle, which is the
+    # reported "right-click behaves like left-click".
+    ("memo-rightclick-popup",
+     '"rightclick"==e?(No=null,Ao.popup({window:Eo}))',
+     '"rightclick"==e?(No=null,(()=>{try{let w=Eo&&Eo.isAlwaysOnTop();'
+     'Eo&&Eo.setAlwaysOnTop(!1),'
+     'Ao.popup({callback:()=>{Eo&&w&&Eo.setAlwaysOnTop(!0)}}),'
+     'console.log("[memo] menu popped, wasOnTop="+w)}catch(x){'
+     'console.log("[memo] menu popup failed: "+x.message),'
+     'Eo&&Eo.setAlwaysOnTop(!0)}})())'),
+    # Linux tray backend reports getBounds() as an empty rect, so the popup
+    # window gets clamped to the screen origin (top-left). Anchor it at the
+    # cursor instead — that is where the user actually clicked.
+    ("tray-popup-pos",
+     'getTrayPopupPosition(){const e=this.tray.getBounds(),t=i.screen.getAllDisplays(),',
+     'getTrayPopupPosition(){let e=this.tray.getBounds();'
+     '"linux"==process.platform&&(!e||0==e.width&&0==e.height)&&(()=>{'
+     'let p=i.screen.getCursorScreenPoint();'
+     'e={x:p.x,y:p.y,width:0,height:0},'
+     'console.log("[tray] popup anchored at cursor "+p.x+","+p.y)})();'
+     'const t=i.screen.getAllDisplays(),'),
+]
+
+
+# 保持自动登录: the official client only keeps the session when
+# vuex.json's user.loginInfo.keepLogin is true, but that file is written by the
+# renderer's persisted store and never gets the post-login mutation on Linux
+# (mtime stays at the last login-page session), so every start cleared the token
+# and went back to the login page. Persist/replay the sign-in payload ourselves.
+KEEP_LOGIN_PATCHES = [
+    ("keep-login-restore",
+     't.keepLogin||a.a.dispatch("user/setToken","")',
+     '(()=>{try{Object(V.readFile)(i.app.getPath("userData")+"/keep-login.json","utf8",(x,d)=>{'
+     'if(x)return console.log("[keep-login] none ("+x.code+")");'
+     'try{let f=JSON.parse(d);if(!f||!f.user||!f.user.token)return;'
+     'a.a.dispatch("user/setUserName",f.user.username),'
+     'a.a.dispatch("user/setQcName",f.user.qcname),'
+     'a.a.dispatch("user/setMaster",f.user.isMaster),'
+     'a.a.dispatch("user/setToken",f.user.token),'
+     'a.a.dispatch("user/setAvatar",f.user.avatar),'
+     'a.a.dispatch("nas/setNasIp",f.nas.nasIp),'
+     'a.a.dispatch("nas/setDevColor",f.nas.color),'
+     'a.a.dispatch("nas/setDevModel",f.nas.deviceMode),'
+     'a.a.dispatch("nas/setNasId",f.nas.nasId),'
+     'a.a.dispatch("nas/setNasName",f.nas.nasName),'
+     'f.nas.nasPubKey&&a.a.dispatch("nas/setPubKey",{nasPubKey:f.nas.nasPubKey,sign:f.nas.sign}),'
+     'a.a.dispatch("user/setLoginInfo",{keepLogin:!0,remember:!0}),'
+     't.keepLogin=!0,'
+     'console.log("[keep-login] restored "+f.user.username)}catch(y){'
+     'console.log("[keep-login] parse failed: "+y.message)}})}catch(x){'
+     'console.log("[keep-login] read error: "+x.message)}})(),'
+     't.keepLogin||a.a.dispatch("user/setToken","")'),
+    ("keep-login-save",
+     'r.a.info("setStoreFromClient time:"+((new Date).getTime()-o)),n?(',
+     'r.a.info("setStoreFromClient time:"+((new Date).getTime()-o)),'
+     '(()=>{try{Uu.writeFile(i.app.getPath("userData")+"/keep-login.json",'
+     'JSON.stringify(t),{mode:384},x=>{x?console.log("[keep-login] save failed: "+x.message):'
+     'console.log("[keep-login] saved session for "+t.user.username)})}catch(x){'
+     'console.log("[keep-login] save error: "+x.message)}})(),n?('),
+    ("keep-login-clear",
+     'a.a.dispatch("user/setToken",""),a.a.dispatch("user/setUserName","")',
+     'a.a.dispatch("user/setToken",""),(()=>{try{'
+     'Uu.unlink(i.app.getPath("userData")+"/keep-login.json",()=>{})}catch(x){}})(),'
+     'a.a.dispatch("user/setUserName","")'),
 ]
 
 
@@ -264,6 +378,8 @@ if __name__ == '__main__':
     apply_patches('player', PLAYER_PATCHES)
     apply_patches('sync', SYNC_PATCHES)
     apply_patches('mount', MOUNT_PATCHES)
+    apply_patches('tray', TRAY_PATCHES)
+    apply_patches('keeplogin', KEEP_LOGIN_PATCHES)
     strip_win32_bindings()
     install_so()
     install_player()
