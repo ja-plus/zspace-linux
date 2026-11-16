@@ -256,7 +256,7 @@ expect() {
 }
 is_elf() { [ "$(od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n')" = "7f454c46" ]; }
 
-say "# 极空间原生版 deb 自检报告"
+say "# 极空间 deb 自检报告"
 say "时间：$(date '+%F %T %Z')"
 say "产物：$DEB"
 say ""

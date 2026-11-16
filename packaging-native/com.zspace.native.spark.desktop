@@ -1,14 +1,14 @@
 [Desktop Entry]
 Type=Application
-Name=极空间（原生版）
-Name[en]=ZSpace Native
+Name=极空间
+Name[en]=ZSpace
 GenericName=私有云客户端
-Comment=极空间私有云客户端（Linux 原生版，非 Wine）
+Comment=极空间私有云客户端
 Exec=/opt/durapps/com.zspace.native.spark/files/run.sh %U
 Icon=com.zspace.native.spark
 Terminal=false
 Categories=Network;FileTransfer;
-Keywords=zspace;极空间;nas;cloud;native;
+Keywords=zspace;极空间;nas;cloud;
 # 原生 Electron 的 WM_CLASS 预期是 electron；首次运行后用
 # `xprop WM_CLASS` 复核，若不同再改成实际值（不影响安装，只影响 Dock 图标匹配）。
 StartupWMClass=electron

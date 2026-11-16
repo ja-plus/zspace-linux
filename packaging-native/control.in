@@ -7,8 +7,8 @@ Section: net
 Priority: optional
 Depends: @DEPENDS@
 Recommends: @RECOMMENDS@
-Description: 极空间私有云客户端（Linux 原生版）
- 基于官方 Electron 应用与自研 libzrpc.so 的 Linux 原生构建，不依赖 Wine，
+Description: 极空间私有云客户端
+ 基于官方 Electron 应用与自研 libzrpc.so 的构建，不依赖 Wine，
  可与 Wine 版 com.zspace.spark 并存安装。
  .
  本包为个人自用构建：改动了官方二进制/配置，不投稿星火商店，也不得公开分发。

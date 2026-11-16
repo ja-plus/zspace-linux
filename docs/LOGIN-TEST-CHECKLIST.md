@@ -1,4 +1,4 @@
-# 登录后实测步骤清单（原生版 native.6）
+# 登录后实测步骤清单（native.6）
 
 > 适用包：`com.zspace.native.spark_2.46.2026101501+native.6-1_amd64.deb`
 > （native.6 以实际产物为准；命令里的文件名按你手上的包替换。）
@@ -328,7 +328,7 @@ sudo apt purge com.zspace.native.spark
 ```
 
 - 两种方式都会执行 `postrm`，清理 `~/.deepinwine/com.zspace.native.spark`
-  （星火红线；原生版实际不用 Wine，但保留）。
+  （星火红线；本包实际不用 Wine，但保留）。
 - `purge` 还会删：`~/.config/zspace`、`~/.config/ZSpace`、`~/.config/极空间`、
   `~/.cache/zspace`、`~/.cache/ZSpace`、`~/.cache/极空间`、
   `~/.local/share/zspace`、`~/.local/share/ZSpace`。

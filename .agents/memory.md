@@ -1252,3 +1252,20 @@
 - 待实测：真实 NAS 的挂载读写/卸载、登录后同步界面、安装启动（C1/C2）。
 - 登录实测清单：`docs/LOGIN-TEST-CHECKLIST.md`（native.6 路径/日志/命令）。
 
+
+## 2026-11-16 应用显示名去「原生版」括号
+
+- 用户要求：用户可见的应用名不再用「极空间（原生版）」这类括号区分。
+- desktop：`Name=极空间`、`Name[en]=ZSpace Linux`、新增
+  `Name[zh_CN]=极空间 Linux`、`Comment=极空间私有云客户端(Linux)`；
+  去掉 Keywords 里的 native。包名/安装目录/desktop 文件名/图标名/
+  `StartupWMClass=electron` 均未动。
+- control Description：`极空间私有云客户端 (Linux)`；README 标题：`极空间`；
+  构建报告标题去掉「原生版」；登录清单标题改为 `（native.6）`。
+- 窗口标题官方本来就是 `极空间 - 家庭私有云`，未改。
+- 与 Wine 版并存时：Wine 是 `极空间`，本包中文显示 `极空间 Linux`，
+  不用括号；若用户要求名称完全一致，可去掉 Name[zh_CN]/Name[en] 的 Linux。
+- 追加（用户再次要求）：名称里连 Linux 也不要。`Name[zh_CN]` 删除，
+  `Name[en]=ZSpace`，`Comment=极空间私有云客户端`，control
+  `Description: 极空间私有云客户端`、长描述去掉「Linux 构建」。
+  两版并存时菜单同名条目用户明确接受，不再做区分。标识字段不动。
