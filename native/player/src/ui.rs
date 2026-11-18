@@ -2,10 +2,12 @@
 //! shortcuts into player commands. Deliberately dependency-free apart from
 //! x11rb (pure Rust X11 protocol, no libX11 headers needed).
 
+use crate::bar::{ControlBar, Snapshot, BAR_H};
+use crate::overlay::Overlay;
 use crate::{Command, Event};
 use std::collections::HashSet;
 use std::sync::mpsc::Sender;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, ClientMessageData, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _,
@@ -37,6 +39,14 @@ struct Atoms {
 pub struct AppWindow {
     conn: RustConnection,
     win: Window,
+    bar: Option<ControlBar>,
+    overlay: Option<Overlay>,
+    geom: (i16, i16, u16, u16),
+    /// 进入全屏前的窗口几何，退出全屏时用来还原（有的 WM 不会自己还原）。
+    restore_geom: Option<(i16, i16, u16, u16)>,
+    /// 退出全屏后稍等一下再强制还原几何，避免和 WM 的异步还原打架。
+    restore_at: Option<Instant>,
+    last_activity: Instant,
     atoms: Atoms,
     min_key: u8,
     keysyms_per_key: usize,
@@ -152,9 +162,26 @@ impl AppWindow {
             screen_w,
             screen_h,
             last_click: None,
+            bar: None,
+            overlay: None,
+            geom: (x, y, width, height),
+            restore_geom: None,
+            restore_at: None,
+            last_activity: Instant::now(),
         };
         window.set_title(&opts.title);
         window.conn.map_window(win).map_err(|e| e.to_string())?;
+        let depth = window.conn.setup().roots[screen_num].root_depth;
+        match ControlBar::new(&window.conn, depth, x, y + height as i16 - BAR_H as i16, width) {
+            Ok(bar) => window.bar = Some(bar),
+            Err(e) => eprintln!("[ui] 控制栏创建失败: {e}"),
+        }
+        // 覆盖层只盖视频区域，底部 76 px 留给控制栏：两个窗口不重叠，
+        // 就不用跟 WM 抢层级（之前盖满整窗时控制栏会被压住）。
+        match Overlay::new(&window.conn, depth, x, y, width, height.saturating_sub(BAR_H)) {
+            Ok(ov) => window.overlay = Some(ov),
+            Err(e) => eprintln!("[ui] 覆盖层创建失败: {e}"),
+        }
         window.conn.flush().map_err(|e| e.to_string())?;
         if opts.fullscreen {
             window.set_fullscreen(true);
@@ -186,6 +213,10 @@ impl AppWindow {
     }
 
     fn set_fullscreen(&mut self, on: bool) {
+        if on && !self.fullscreen {
+            // 记住当前几何（含用户已经手动放大的情况），退出全屏要回到这里。
+            self.restore_geom = Some(self.geom);
+        }
         let action = if on { 1u32 } else { 0u32 };
         let data = ClientMessageData::from([
             action,
@@ -196,8 +227,8 @@ impl AppWindow {
         ]);
         let event = ClientMessageEvent::new(32, self.win, self.atoms.net_wm_state, data);
         let _ = self.conn.send_event(false, self.win, EventMask::NO_EVENT, event);
-        // Fallback for WMs without EWMH fullscreen support.
         if on {
+            // Fallback for WMs without EWMH fullscreen support.
             let _ = self.conn.configure_window(
                 self.win,
                 &ConfigureWindowAux::new()
@@ -206,6 +237,10 @@ impl AppWindow {
                     .width(self.screen_w as u32)
                     .height(self.screen_h as u32),
             );
+        } else if self.restore_geom.is_some() {
+            // 先只发 EWMH 取消全屏，给 WM 300 ms 自己还原几何；
+            // 到点还在屏幕尺寸才强制压回去，避免和 WM 抢位置（会把窗口越推越偏）。
+            self.restore_at = Some(Instant::now() + Duration::from_millis(1200));
         }
         let _ = self.conn.flush();
         self.fullscreen = on;
@@ -295,12 +330,21 @@ impl AppWindow {
         }
     }
 
-    /// Drains pending X events. Returns `false` when the window is gone.
-    pub fn pump(&mut self, tx: &Sender<Event>) -> bool {
+    /// Drains pending X events, keeps the control bar in sync and returns
+    /// `false` when the window is gone.
+    pub fn pump(&mut self, tx: &Sender<Event>, snap_in: &Snapshot) -> bool {
+        // 全屏状态在 UI 层，播放状态在 main 里，合并成一份给控制栏用
+        let mut snapshot = snap_in.clone();
+        snapshot.fullscreen = self.fullscreen;
+        let snap = &snapshot;
+        let bar_id = self.bar.as_ref().map(|b| b.id());
+        let menu_id = self.bar.as_ref().map(|b| b.menu_id());
+        let ov_big = self.overlay.as_ref().map(|o| o.big_id());
+        let ov_small = self.overlay.as_ref().map(|o| o.small_id());
         loop {
             let event = match self.conn.poll_for_event() {
                 Ok(Some(e)) => e,
-                Ok(None) => return true,
+                Ok(None) => break,
                 Err(_) => return false,
             };
             match event {
@@ -308,18 +352,84 @@ impl AppWindow {
                 XEvent::KeyRelease(e) => {
                     self.pressed.remove(&e.detail);
                 }
+                XEvent::MotionNotify(e) => {
+                    self.last_activity = Instant::now();
+                    if Some(e.event) == bar_id {
+                        if let Some(bar) = self.bar.as_mut() {
+                            if let Some(cmd) = bar.on_motion(&self.conn, e.event_x, e.event_y, snap) {
+                                let _ = tx.send(Event::Command(cmd));
+                            }
+                        }
+                    }
+                }
+                XEvent::EnterNotify(_) => self.last_activity = Instant::now(),
                 XEvent::ButtonPress(e) => {
-                    if e.detail == 1 {
+                    if Some(e.event) == ov_big || Some(e.event) == ov_small {
+                        if let Some(ov) = self.overlay.as_mut() {
+                            if let Some(cmd) = ov.on_click(e.event, e.event_x, e.event_y) {
+                                self.dispatch(cmd, tx);
+                            }
+                        }
+                    } else if Some(e.event) == menu_id {
+                        if let Some(mut bar) = self.bar.take() {
+                            let cmd = bar.on_menu_click(e.event_x, e.event_y);
+                            bar.close_menu(&self.conn);
+                            self.bar = Some(bar);
+                            if let Some(cmd) = cmd {
+                                self.dispatch(cmd, tx);
+                            }
+                        }
+                    } else if Some(e.event) == bar_id {
+                        if let Some(mut bar) = self.bar.take() {
+                            bar.close_menu(&self.conn);
+                            let cmd = bar.on_button(e.event_x, e.event_y, snap);
+                            let pending = bar.take_pending_menu();
+                            if let Some(kind) = pending {
+                                bar.open_menu(&self.conn, kind, snap);
+                            }
+                            self.bar = Some(bar);
+                            if let Some(cmd) = cmd {
+                                self.dispatch(cmd, tx);
+                            }
+                        }
+                    } else if e.detail == 1 {
                         let now = Instant::now();
                         let double = self
                             .last_click
                             .map(|t| now.duration_since(t).as_millis() < 400)
                             .unwrap_or(false);
                         self.last_click = Some(now);
+                        self.last_activity = now;
+                        if let Some(mut bar) = self.bar.take() {
+                            bar.close_menu(&self.conn);
+                            self.bar = Some(bar);
+                        }
                         if double {
                             let on = !self.fullscreen;
                             self.set_fullscreen(on);
                         }
+                    }
+                }
+                XEvent::ButtonRelease(e) => {
+                    if Some(e.event) == bar_id {
+                        if let Some(bar) = self.bar.as_mut() {
+                            if let Some(cmd) = bar.on_release(e.event_x, e.event_y, snap) {
+                                self.dispatch(cmd, tx);
+                            }
+                        }
+                    }
+                }
+                XEvent::Expose(e) => {
+                    if Some(e.window) == bar_id {
+                        if let Some(bar) = self.bar.as_mut() {
+                            bar.draw(&self.conn, snap, true);
+                        }
+                    }
+                }
+                XEvent::ConfigureNotify(e) => {
+                    if e.window == self.win {
+                        self.geom = (e.x, e.y, e.width, e.height);
+                        self.place_bar();
                     }
                 }
                 XEvent::ClientMessage(e) => {
@@ -331,6 +441,95 @@ impl AppWindow {
                 XEvent::Error(_) => {}
                 _ => {}
             }
+        }
+
+        // 退出全屏后 300 ms 检查一次：WM 没自己还原（窗口还占满屏宽）才强制压回去。
+        if let Some(at) = self.restore_at {
+            if Instant::now() >= at {
+                self.restore_at = None;
+                if let Some((tx, ty, tw, th)) = self.restore_geom {
+                    let (gx, gy, gw, gh) = self.geom;
+                    if gw as f64 >= self.screen_w as f64 * 0.95 {
+                        // 尺寸还占满屏宽：先只改尺寸（位置留给 WM），改完再看位置。
+                        let _ = self.conn.configure_window(
+                            self.win,
+                            &ConfigureWindowAux::new().width(tw as u32).height(th as u32),
+                        );
+                        let _ = self.conn.flush();
+                        self.restore_at = Some(Instant::now() + Duration::from_millis(300));
+                        eprintln!("[ui] WM 未还原全屏前尺寸，强制改回 {tw}x{th}");
+                    } else {
+                        // 尺寸已经回来了：位置由 WM 决定。DDE/treeland 不会把窗口
+                        // 挪回全屏前的位置（停在左上角），客户端 configure x/y
+                        // 对它无效，这里不再强行掰，免得和 WM 抢坐标。
+                        let _ = (tx, ty, gx, gy, gh);
+                    }
+                }
+            }
+        }
+
+        // auto-hide: 3 s after the last mouse movement while playing
+        let idle = self.last_activity.elapsed();
+        let want = snap.pos_ms == 0
+            || !snap.playing
+            || snap.ended
+            || snap.error.is_some()
+            || snap.skip.is_some()
+            || idle < Duration::from_secs(3)
+            || self.bar.as_ref().map(|b| b.is_dragging()).unwrap_or(false)
+            || self.bar.as_ref().map(|b| b.menu_open()).unwrap_or(false);
+        let bar_visible_before = self.bar.as_ref().map(|b| b.visible).unwrap_or(false);
+        if let Some(bar) = self.bar.as_mut() {
+            if want {
+                bar.show(&self.conn);
+                if !snap.playing {
+                    self.last_activity = Instant::now();
+                }
+            } else {
+                bar.hide(&self.conn);
+            }
+            if bar.visible {
+                // 刚从隐藏变可见要强制画：X11 不保留未映射窗口的内容，
+                // 只靠「快照变了才画」会留下一条空白黑条。
+                bar.draw(&self.conn, snap, !bar_visible_before);
+            }
+        }
+        // 覆盖层（结束页/错误页/加载卡片/跳过提示）跟着状态走。
+        let ov_mapped = self
+            .overlay
+            .as_mut()
+            .map(|ov| ov.sync(&self.conn, snap))
+            .unwrap_or(false);
+        // 层级：覆盖层刚映射、或控制栏刚刚从隐藏变可见，都要把它重新抬到最上层
+        // （覆盖层是后映射的窗口，不抬的话会把控制栏整条盖住）。
+        let bar_visible_now = self.bar.as_ref().map(|b| b.visible).unwrap_or(false);
+        if bar_visible_now && (ov_mapped || !bar_visible_before) {
+            if let Some(bar) = self.bar.as_ref() {
+                bar.raise(&self.conn);
+            }
+        }
+        true
+    }
+
+    fn dispatch(&mut self, cmd: Command, tx: &Sender<Event>) {
+        match cmd {
+            Command::ToggleFullscreen => {
+                let on = !self.fullscreen;
+                self.set_fullscreen(on);
+            }
+            other => {
+                let _ = tx.send(Event::Command(other));
+            }
+        }
+    }
+
+    fn place_bar(&mut self) {
+        let (x, y, w, h) = self.geom;
+        if let Some(bar) = self.bar.as_mut() {
+            bar.place(&self.conn, x, y + h as i16 - BAR_H as i16, w);
+        }
+        if let Some(ov) = self.overlay.as_mut() {
+            ov.place(&self.conn, x, y, w, h.saturating_sub(BAR_H));
         }
     }
 }

@@ -1,0 +1,347 @@
+/* 从官方 UZPlayer.exe 提取的 QSS 原文（逐条内联样式表汇总） */
+
+QComboBox QAbstractItemView {background:#11131E;font-size:12px;color:rgba(255,255,255,0.8);outline:0px;}
+
+QComboBox QAbstractItemView::item {background:#11131E;min-height: 30px;color:#FFFFFF;}
+
+QComboBox QAbstractItemView::item:selected {background:rgba(187,197,255,0.15);min-height:30px;color:#FFFFFF;}
+
+QComboBox::down-arrow {image: url(:/resource/setconfig/down-arrow.png);}
+
+QLabel {color: rgba(255,255,255,0.55); font-size: 14px; background: transparent;}
+
+QLabel#backlabel {border-image: url(:/resource/background.jpg);}
+
+QLabel#labDefault {border-image: url(:/resource/selectitem/vector2x.png);}
+
+QLabel#labErrorIcon {border-image: url(:/resource/popup/search2x.png);}
+
+QLabel#labFastDown {border-image: url(:/resource/popup/extendToBottomInDark2x.png);}
+
+QLabel#labIcon {border-image: url(:/resource/setsubtitle/success2x.png);}
+
+QLabel#labIntroDown {border-image: url(:/resource/popup/extendToBottomInDark2x.png);}
+
+QLabel#labIntroPrevious {border-image: url(:/resource/popup/SubtractLeft2x.png);}
+
+QLabel#labIntroStart {border-image: url(:/resource/popup/SubtractRight2x.png);}
+
+QLabel#labLoading {border-image: url(:/resource/loading/loadingWhite18.png);}
+
+QLabel#labLogo {border-image: url(:/resource/titlebar/zspaceVideoPlayer302x.png);}
+
+QLabel#labMouse {border-image: url(:/resource/guide/mouse2x.png);}
+
+QLabel#labName {background:transparent;border:none;font-size:14px;color:rgba(255,255,255,0.9);}
+
+QLabel#labOutroEnd {border-image: url(:/resource/popup/SubtractLeft2x.png);}
+
+QLabel#labOutroPreview {border-image: url(:/resource/popup/SubtractRight2x.png);}
+
+QLabel#labPart {background: rgba(255,255,255,0.3);}
+
+QLabel#labPointTo {border-image: url(:/resource/guide/guide2x.png);}
+
+QLabel#labPostIcon {border-image:url(%1);}
+
+QLabel#labPreIcon {border-image:url(%1);}
+
+QLabel#labSelect {border-image: url(:/resource/popup/successSlim2x.png);}
+
+QLabel#labSeparator {background-color: rgba(255,255,255,0.15);}
+
+QLabel#labSort {border-image: url(:/resource/popup/ascendingArrowInDark2x.png);}
+
+QLabel#labSortDown {border-image: url(:/resource/popup/extendToBottomInDark2x.png);}
+
+QLabel#labSubtitleAdd {border-image: url(:/resource/setconfig/addLight2x.png);}
+
+QLabel#labVideo360 {border-image: url(:/resource/titlebar/360d2x.png);}
+
+QLabel#playlabel {border-image: url(:/resource/centerplay.png);}
+
+QLineEdit#lineEditIntroPreviousMinutes {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditIntroPreviousSeconds {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditIntroStartMinutes {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditIntroStartSeconds {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditOutroEndMinutes {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditOutroEndSeconds {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditOutroPreviewMinutes {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QLineEdit#lineEditOutroPreviewSeconds {background:rgba(255,255,255,0.06);border-radius:8px;border: 1px solid #4E4E4E;font-weight:400;font-size:14px;color:#FFFFFF;}
+
+QListWidget#liveChannelList {background: transparent; border: none; outline: none;}
+
+QListWidget#liveGroupList {background: transparent; border: none; outline: none;}
+
+QListWidget#liveGroupList::item {color: rgba(255,255,255,0.72); font-size: 14px; padding: 8px 8px; border-radius: 5px;}
+
+QListWidget#liveGroupList::item:hover {color: #FFFFFF; background: rgba(255,255,255,0.10);}
+
+QListWidget#liveGroupList::item:selected {color: #FFFFFF; background: rgba(255,255,255,0.15);}
+
+QPushButton#btn10min {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btn15min {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btn30min {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btn60min {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnAfter1Ep {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnAfter2Ep {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnAfter3Ep {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnAfter5Ep {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnAllPlay {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnAudioChannel {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnAudioChannel:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnAudioTrack {border-image: url(:/resource/controlbar/audioTrackWhite2x.png);}
+
+QPushButton#btnAudioTrack:hover {border-image: url(:/resource/controlbar/audioTrackHoverWhite2x.png);}
+
+QPushButton#btnBack {border-image: url(:/resource/controlbar/previousVideoWhite2x.png);}
+
+QPushButton#btnBack:hover {border-image: url(:/resource/controlbar/previousVideoHoverWhite2x.png);}
+
+QPushButton#btnBluray {border-image: url(:/resource/controlbar/blurayWhite2x.png);}
+
+QPushButton#btnBluray:hover {border-image: url(:/resource/controlbar/blurayHoverWhite2x.png);}
+
+QPushButton#btnClose {border-image: url(:/resource/popup/popupClose2x.png);}
+
+QPushButton#btnClose:hover {border-image: url(:/resource/popup/popupCloseHover2x.png);}
+
+QPushButton#btnCompatibleMode {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnDecode {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnDecode:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnDecodeHard {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnDecodeSoft {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnDelete {border-image: url(:/resource/selectitem/deleteWhite2x.png);}
+
+QPushButton#btnDelete:hover {border-image: url(:/resource/selectitem/deleteRed2x.png);}
+
+QPushButton#btnDemux {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnDemux:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnDemuxAV {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnDemuxVLC {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnDolbyMode {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnEpisode {border-image: url(:/resource/controlbar/episodesWhite2x.png);}
+
+QPushButton#btnEpisode:hover {border-image: url(:/resource/controlbar/episodesHoverWhite2x.png);}
+
+QPushButton#btnExitMac {border-image: url(:/resource/mac/close.png);}
+
+QPushButton#btnExitMac:hover {border-image: url(:/resource/mac/close_act.png);}
+
+QPushButton#btnExitWin {border-image: url(:/resource/titlebar/winClose2x.png);}
+
+QPushButton#btnExitWin:hover {border-image: url(:/resource/titlebar/winCloseHover2x.png);}
+
+QPushButton#btnFastForward {border-image: url(:/resource/controlbar/fastForward2x.png);}
+
+QPushButton#btnFastForward:hover {border-image: url(:/resource/controlbar/fastForwardHover2x.png);}
+
+QPushButton#btnFormat {font-size:16px;color:rgba(255,255,255,0.9);border:outset;padding-left:8px;padding-right:8px;}
+
+QPushButton#btnFront {border-image: url(:/resource/titlebar/pinLight2x.png);}
+
+QPushButton#btnFront:hover {border-image: url(:/resource/titlebar/pinLightHover2x.png);}
+
+QPushButton#btnFullScreen {border-image: url(:/resource/controlbar/fullScreenWhite2x.png);}
+
+QPushButton#btnFullScreen:hover {border-image: url(:/resource/controlbar/fullScreenHoverWhite2x.png);}
+
+QPushButton#btnHdr {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnHdr:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnHdrMode {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnIndividuation {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnIndividuation:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnInfo {border-image: url(:/resource/titlebar/info2x.png);}
+
+QPushButton#btnInfo:hover {border-image: url(:/resource/titlebar/infoHover2x.png);}
+
+QPushButton#btnMaxMac {border-image: url(:/resource/mac/max.png);}
+
+QPushButton#btnMaxMac:hover {border-image: url(:/resource/mac/max_act.png);}
+
+QPushButton#btnMaxWin {border-image: url(:/resource/titlebar/winMax2x.png);}
+
+QPushButton#btnMaxWin:hover {border-image: url(:/resource/titlebar/winMaxHover2x.png);}
+
+QPushButton#btnMinMac {border-image: url(:/resource/mac/min.png);}
+
+QPushButton#btnMinMac:hover {border-image: url(:/resource/mac/min_act.png);}
+
+QPushButton#btnMinWin {border-image: url(:/resource/titlebar/winMin2x.png);}
+
+QPushButton#btnMinWin:hover {border-image: url(:/resource/titlebar/winMinHover2x.png);}
+
+QPushButton#btnMore {border-image: url(:/resource/controlbar/moreWhite2x.png);}
+
+QPushButton#btnMore:hover {border-image: url(:/resource/controlbar/moreHoverWhite2x.png);}
+
+QPushButton#btnNext {border-image: url(:/resource/controlbar/nextVideoWhite2x.png);}
+
+QPushButton#btnNext:hover {border-image: url(:/resource/controlbar/nextVideoHoverWhite2x.png);}
+
+QPushButton#btnOK {background:rgba(66,95,255,0.4);color:rgba(255,255,255,0.4);font-weight:500;font-size:14px;border-radius:20px;}
+
+QPushButton#btnOK:hover {background:#253DC3;color:#FFFFFF;font-weight:500;font-size:14px;border-radius:20px;}
+
+QPushButton#btnPause {border-image: url(:/resource/controlbar/playWhite2x.png);}
+
+QPushButton#btnPause:hover {border-image: url(:/resource/controlbar/playHoverWhite2x.png);}
+
+QPushButton#btnPicture {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnPicture:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnPlay {border-image: url(:/resource/controlbar/pauseWhite2x.png);}
+
+QPushButton#btnPlay:hover {border-image: url(:/resource/controlbar/pauseHoverWhite2x.png);}
+
+QPushButton#btnPlayLoop {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnPlayLoop:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnRandomPlay {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnRestoreScreen {border-image: url(:/resource/controlbar/exitFullScreenWhite2x.png);}
+
+QPushButton#btnRestoreScreen:hover {border-image: url(:/resource/controlbar/exitFullScreenHoverWhite2x.png);}
+
+QPushButton#btnRewind {border-image: url(:/resource/controlbar/rewind2x.png);}
+
+QPushButton#btnRewind:hover {border-image: url(:/resource/controlbar/rewindHover2x.png);}
+
+QPushButton#btnSelect {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnSeqPlay {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnShare {border-image: url(:/resource/selectitem/checkboxUnselected.png);}
+
+QPushButton#btnShortcut {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnShortcut:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnShow {border-image: url(:/resource/controlbar/IntroOutroFloating.png);}
+
+QPushButton#btnShow:hover {font-size:16px;color:#FFFFFF;background:rgba(255,255,255,0.1);padding-right:10px;border-radius:18px;background: rgba(255,255,255,0.25);}
+
+QPushButton#btnSinglePlay {border-image: url(:/resource/selectitem/selectCircle20Selected2x.png);}
+
+QPushButton#btnSleepTimer {font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnSleepTimer:hover {background:rgba(130,149,255,0.12);border-radius:4px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;text-align:left;padding-left:12px;}
+
+QPushButton#btnSmallWindow {border-image: url(:/resource/controlbar/smallWindow2x.png);}
+
+QPushButton#btnSmallWindow:hover {border-image: url(:/resource/controlbar/smallWindowHover2x.png);}
+
+QPushButton#btnSpeed {background:rgba(255,255,255,0.15);border-radius:8px;font-size:16px;color:rgba(255,255,255,0.9);border:outset;padding-left:8px;padding-right:8px;}
+
+QPushButton#btnSubtitle {border-image: url(:/resource/controlbar/subtitleWhite2x.png);}
+
+QPushButton#btnSubtitle:hover {border-image: url(:/resource/controlbar/subtitleHoverWhite2x.png);}
+
+QPushButton#btnTips {border-image: url(:/resource/selectitem/info.png);}
+
+QPushButton#btnTips:hover {border-image: url(:/resource/selectitem/noteLineWhiteHover2x.png);}
+
+QPushButton#btnVolume {border-image: url(:/resource/controlbar/volumeWhite2x.png);}
+
+QPushButton#btnVolume:hover {border-image: url(:/resource/controlbar/volumeHoverWhite2x.png);}
+
+QPushButton#exitButton {border-image: url(:/resource/playbegin/closeBtnLight322x.png);}
+
+QPushButton#playButton {border-image: url(:/resource/centerplay.png);}
+
+QScrollBar::add-line:vertical {background:transparent;height:0px;}
+
+QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical {background:transparent;border-radius:3px;}
+
+QScrollBar::handle:vertical {background:rgba(255, 255, 255, 0.15);min-height:10px;border-radius:3px;}
+
+QScrollBar::sub-line:vertical {background:transparent;height:0px;}
+
+QScrollBar:vertical {background:transparent;width:6px;margin:0px 0px 8px 0px;}
+
+QSlider::add-page:horizontal {background: rgba(228,228,228,0.15);}
+
+QSlider::handle:horizontal {background: transparent;}
+
+QSlider::sub-page:horizontal {background: #425FFF;}
+
+QWidget#Eoftip {border-radius: 10px;}
+
+QWidget#backwidget {border-image: url(:/resource/rateback2x.png);}
+
+QWidget#centralwidget {background: #141620;}
+
+QWidget#errorshow {border-radius: 10px;}
+
+QWidget#liveChannelItem {border-radius: 5px; border: 2px solid #FFFFFF; background: transparent;}
+
+QWidget#liveChannelItem:hover {background: rgba(255,255,255,0.08);}
+
+QWidget#playbegin {border-radius: 10px;}
+
+QWidget#replaytip {border-radius: 10px;}
+
+QWidget#scrollAreaWidgetContents {background:transparent;}
+
+QWidget#subnoserch {border-radius: 10px;}
+
+QWidget#topwidget {background: #141620;}
+
+QWidget#videoloading {border-radius: 8px;}
+
+QWidget#widButtons {border-right: 1px solid rgba(255,255,255,0.15);}
+
+QWidget#widControl {background: linear-gradient( 180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.6) 55%, rgba(0,0,0,0.75) 100%), #141620;}
+
+QWidget#widDetail {border-bottom: 1px solid rgba(255,255,255,0.15);}
+
+QWidget#widEnd {background: transparent;}
+
+QWidget#widHead {background: transparent;}
+
+QWidget#widLiveBase {background: rgba(0,0,0,0.85);border-radius: 8px;border: 1px solid rgba(179,193,205,0.15);}
+
+QWidget#widMouse {background: transparent;}
+
+QWidget#widPointTo {background: transparent;}
+
+QWidget#widShow {border-radius:5px;border:2px solid #FFFFFF;}
+
+QWidget#widText {background: transparent;}
+
+QWidget#widTitle {border-bottom: 1px solid rgba(255,255,255,0.15);}

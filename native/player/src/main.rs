@@ -9,7 +9,10 @@
 //!
 //! 第一个参数是 `encodeURIComponent(JSON.stringify({server:{ip,port}}))`。
 
+mod bar;
+mod overlay;
 mod protocol;
+mod style;
 mod ui;
 mod vlc;
 
@@ -20,10 +23,23 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use bar::Snapshot;
 use ui::{AppWindow, UiOptions};
 
-#[derive(Debug)]
+/// 控制栏弹层类型（bar.rs 与 main.rs 共用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuKind {
+    Speed,
+    Quality,
+    Audio,
+    Subtitle,
+    Episode,
+    More,
+}
+
+#[derive(Debug, Clone)]
 pub enum Command {
     TogglePause,
     SeekBy(f64),
@@ -36,6 +52,19 @@ pub enum Command {
     LoadLocalSubtitle,
     QualityNext,
     RateBy(f32),
+    SeekTo(f64),
+    SetRate(f32),
+    SetVolume(i32),
+    SelectQuality(usize),
+    SelectAudio(usize),
+    SelectSubtitle(i64),
+    PlayEpisode(usize),
+    ToggleLoop,
+    /// 睡眠定时循环：关闭 → 30 分钟 → 60 分钟 → 关闭。
+    CycleSleepTimer,
+    /// 结束页「重播」：回到 0 秒重新播。
+    Replay,
+    ToggleFullscreen,
     Quit,
 }
 
@@ -73,9 +102,24 @@ fn local_now() -> (String, String) {
     }
 }
 
-fn log(msg: impl AsRef<str>) {
+pub fn log(msg: impl AsRef<str>) {
     let (_, clock) = local_now();
-    eprintln!("[{clock}] [player] {}", msg.as_ref());
+    let line = format!("[{clock}] [player] {}", msg.as_ref());
+    eprintln!("{line}");
+    // Electron pipes the player's stderr away, so also append to the log the
+    // launcher documents (~/.config/zspace/logs/player.log).
+    if let Some(home) = std::env::var_os("HOME") {
+        let dir = std::path::PathBuf::from(home).join(".config/zspace/logs");
+        let _ = std::fs::create_dir_all(&dir);
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("player.log"))
+        {
+            use std::io::Write as _;
+            let _ = writeln!(f, "{line}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +462,14 @@ struct PlayState {
     last_progress: Instant,
     last_heartbeat: Instant,
     finished: bool,
+    looping: bool,
+    /// 睡眠定时：剩余分钟数（None = 关闭）与到点时刻。
+    sleep_min: Option<u32>,
+    sleep_deadline: Option<Instant>,
+    /// 首帧未出/等主进程重新出地址时为真（覆盖层「正在加载」）。
+    loading: bool,
+    /// 播放错误原因（8/1 或 libvlc 报错），覆盖层整块显示错误页。
+    error: Option<String>,
     stop_sent: bool,
     pending: Option<Pending>,
 }
@@ -449,6 +501,11 @@ impl PlayState {
             last_progress: now,
             last_heartbeat: now,
             finished: false,
+            looping: false,
+            sleep_min: None,
+            sleep_deadline: None,
+            loading: true,
+            error: None,
             stop_sent: false,
             pending: None,
         }
@@ -506,8 +563,12 @@ fn start_item(
         item.get("label").and_then(|v| v.as_str()).unwrap_or("")
     ));
 
+    st.loading = true;
+    st.error = None;
     if let Err(e) = engine.open(uri, &options) {
         log(format!("打开媒体失败: {e}"));
+        st.loading = false;
+        st.error = Some(e);
         return;
     }
     let rc = engine.play();
@@ -564,12 +625,156 @@ fn start_item(
         })
         .unwrap_or_default();
     st.tracks_applied = false;
+    st.finished = false;
+    st.stop_sent = false;
     st.tracks_deadline = Instant::now() + Duration::from_secs(20);
     if new_session {
         st.started_ack = false;
     }
     st.last_progress = Instant::now();
     st.last_heartbeat = Instant::now();
+}
+
+/// 片头片尾提示：`12/3` collectionInfo.skip 的 `start`/`end`（秒）。
+/// 官方语义：`start` = 片头结束点，`end` = 片尾开始点。
+/// 位置落在片头区间就给「跳过片头」，落在片尾区间给「跳过片尾」，
+/// 文案里带剩余秒数，和官方浮层的倒计时一致。
+fn skip_hint(st: &PlayState, pos_ms: i64, len_ms: i64) -> Option<(String, f64)> {
+    let skip = st.collection_info.as_ref()?.get("skip")?;
+    let start = skip.get("start").and_then(as_f64).unwrap_or(0.0);
+    let end = skip.get("end").and_then(as_f64).unwrap_or(0.0);
+    let pos = (pos_ms as f64 / 1000.0).max(0.0);
+    let len = len_ms as f64 / 1000.0;
+    if start > 1.0 && pos < start - 0.5 {
+        let left = (start - pos).ceil().max(0.0) as i64;
+        return Some((format!("跳过片头 {left}s"), start));
+    }
+    if end > 1.0 && len > end + 1.0 && pos >= end && pos < len - 1.0 {
+        let left = (len - pos).ceil().max(0.0) as i64;
+        return Some((format!("跳过片尾 {left}s"), (len - 0.5).max(0.0)));
+    }
+    None
+}
+
+/// 控制栏绘制所需的快照（每秒刷新，跨线程共享）。
+fn snapshot_of(engine: &vlc::Engine, st: &PlayState) -> Snapshot {
+    let title = st
+        .current
+        .as_ref()
+        .and_then(|item| {
+            ["title", "name", "file_name", "label"]
+                .iter()
+                .find_map(|k| item.get(*k).and_then(|v| v.as_str()))
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_default();
+    let quality = st
+        .format_list
+        .get(st.format_index.unwrap_or(0))
+        .and_then(|f| {
+            ["label", "name", "quality", "resolution"]
+                .iter()
+                .find_map(|k| f.get(*k).and_then(|v| v.as_str()))
+                .map(|s| s.to_string())
+        })
+        .or_else(|| {
+            st.current.as_ref().and_then(|i| {
+                i.get("quality").and_then(|v| v.as_str()).map(|s| s.to_string())
+            })
+        })
+        .unwrap_or_default();
+    let audio = match st.audio_ordinal {
+        Some(i) => format!("{}", i + 1),
+        None => "1".to_string(),
+    };
+    let subtitle = if st.sub_ordinal.is_some() || st.nas_sub_index.is_some() {
+        "开".to_string()
+    } else {
+        "关".to_string()
+    };
+    let (has_prev, has_next) = match st.episode_index {
+        Some(i) => (i > 0, i + 1 < st.episode_list.len()),
+        None => (false, false),
+    };
+    let qualities: Vec<(String, bool)> = st
+        .format_list
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let label = ["label", "name", "quality", "resolution"]
+                .iter()
+                .find_map(|k| f.get(*k).and_then(|v| v.as_str()))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("码流 {}", i + 1));
+            (label, st.format_index == Some(i))
+        })
+        .collect();
+    // 音轨列表取 libvlc 的真实轨道（id>=0，语言名可能为空），不再写死条数。
+    let audios: Vec<(String, bool)> = engine
+        .audio_tracks()
+        .into_iter()
+        .filter(|t| t.id >= 0)
+        .enumerate()
+        .map(|(i, t)| {
+            let name = t.name.trim();
+            let label = if name.is_empty() {
+                format!("音轨 {}", i + 1)
+            } else {
+                name.to_string()
+            };
+            (label, st.audio_ordinal == Some(i))
+        })
+        .collect();
+    let mut subtitles: Vec<(String, bool)> = vec![("关闭字幕".to_string(), st.sub_ordinal.is_none() && st.nas_sub_index.is_none())];
+    for (i, sub) in st.subtitle_list.iter().enumerate() {
+        let name = ["label", "name", "title", "language"]
+            .iter()
+            .find_map(|k| sub.get(*k).and_then(|v| v.as_str()))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("字幕 {}", i + 1));
+        subtitles.push((name, st.nas_sub_index == Some(i as i64)));
+    }
+    let episodes: Vec<(String, bool)> = st
+        .episode_list
+        .iter()
+        .enumerate()
+        .map(|(i, ep)| {
+            let name = ["label", "name", "title", "file_name"]
+                .iter()
+                .find_map(|k| ep.get(*k).and_then(|v| v.as_str()))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("第 {} 集", i + 1));
+            (name, st.episode_index == Some(i))
+        })
+        .collect();
+
+    let (pos_ms, len_ms) = (engine.time_ms(), engine.length_ms());
+    Snapshot {
+        title,
+        looping: st.looping,
+        sleep_min: st.sleep_min,
+        loading: st.loading && !st.finished,
+        error: st.error.clone(),
+        ended: st.finished && st.error.is_none(),
+        // 由 UI 层在 pump 时按真实全屏状态覆盖
+        fullscreen: false,
+        skip: skip_hint(st, pos_ms, len_ms),
+        qualities,
+        audios,
+        subtitles,
+        episodes,
+        playing: engine.is_playing(),
+        pos_ms,
+        len_ms,
+        rate: engine.rate(),
+        volume: engine.volume(),
+        muted: engine.volume() <= 0,
+        quality,
+        audio,
+        subtitle,
+        has_prev,
+        has_next,
+    }
 }
 
 fn progress_payload(st: &PlayState, engine: &vlc::Engine) -> Value {
@@ -1119,12 +1324,15 @@ fn handle_message(v: &Value, engine: &mut vlc::Engine, st: &mut PlayState) -> bo
             false
         }
         (Some(8), _) => {
+            let reason = v.get("reason").and_then(|x| x.as_str()).unwrap_or("").to_string();
             log(format!(
                 "播放错误消息: info_type={:?} show_info={} reason={}",
                 field(v, "info_type"),
                 v.get("show_info").and_then(|x| x.as_str()).unwrap_or(""),
-                v.get("reason").and_then(|x| x.as_str()).unwrap_or("")
+                reason
             ));
+            st.loading = false;
+            st.error = Some(if reason.is_empty() { "播放出错".to_string() } else { reason });
             false
         }
         _ => {
@@ -1239,6 +1447,81 @@ fn handle_command(cmd: Command, engine: &mut vlc::Engine, st: &mut PlayState, so
             let rate = engine.set_rate(engine.rate() + delta);
             log(format!("倍速 → {rate:.2}x"));
         }
+        Command::SeekTo(sec) => {
+            if st.current.is_some() {
+                engine.seek_ms((sec.max(0.0) * 1000.0) as i64);
+                log(format!("seek → {sec:.1}s"));
+            }
+        }
+        Command::SetRate(r) => {
+            engine.set_rate(r.clamp(0.25, 4.0));
+            log(format!("倍速 → {r:.2}x"));
+        }
+        Command::SetVolume(v) => {
+            let nv = engine.set_volume(v.clamp(0, 100));
+            log(format!("音量 → {nv}"));
+        }
+        Command::SelectAudio(i) => {
+            let seek = engine.time_ms() as f64 / 1000.0;
+            request_server_audio(st, sock, i, seek);
+        }
+        Command::SelectSubtitle(i) => {
+            let idx = if i < 0 { None } else { Some(i as usize) };
+            request_subtitle_only(st, sock, idx);
+        }
+        Command::SelectQuality(i) => {
+            let seek = engine.time_ms() as f64 / 1000.0;
+            let audio = st.audio_ordinal.map(|v| v as i64).unwrap_or(-1);
+            let subtitle = st
+                .nas_sub_index
+                .unwrap_or_else(|| st.sub_ordinal.map(|v| v as i64).unwrap_or(-1));
+            st.pending = Some(Pending { kind: PendingKind::Quality { index: i }, sent_at: Instant::now() });
+            log(format!("发送 7/1 选择码流: result={i} seek={seek:.1}s"));
+            sock.send(json!({
+                "f_type": 7,
+                "s_type": 1,
+                "result": i,
+                "seek": seek,
+                "audiotrack": audio,
+                "subtitle": subtitle,
+            }));
+        }
+        Command::PlayEpisode(i) => {
+            let cur = st.episode_index.unwrap_or(0) as i32;
+            request_episode_switch(st, sock, i as i32 - cur);
+        }
+        Command::ToggleLoop => {
+            st.looping = !st.looping;
+            log(format!("循环播放：{}", if st.looping { "开" } else { "关" }));
+        }
+        Command::Replay => {
+            st.finished = false;
+            st.error = None;
+            st.loading = true;
+            st.stop_sent = false;
+            engine.seek_ms(0);
+            engine.play();
+            log("结束页「重播」：回到开头");
+        }
+        Command::CycleSleepTimer => {
+            st.sleep_min = match st.sleep_min {
+                None => Some(30),
+                Some(30) => Some(60),
+                _ => None,
+            };
+            st.sleep_deadline = st
+                .sleep_min
+                .map(|m| Instant::now() + Duration::from_secs(m as u64 * 60));
+            log(format!(
+                "睡眠定时：{}",
+                match st.sleep_min {
+                    Some(m) => format!("{m} 分钟后暂停"),
+                    None => "关闭".to_string(),
+                }
+            ));
+        }
+        // handled by the UI thread (needs the window), see AppWindow::pump
+        Command::ToggleFullscreen => {}
         Command::Quit => {}
     }
 }
@@ -1249,6 +1532,15 @@ fn tick(engine: &mut vlc::Engine, st: &mut PlayState, sock: &mut Socket) {
     }
     let state = engine.state();
     let time_ms = engine.time_ms();
+
+    if let Some(at) = st.sleep_deadline {
+        if Instant::now() >= at {
+            log("睡眠定时到点，暂停播放");
+            engine.set_pause(true);
+            st.sleep_min = None;
+            st.sleep_deadline = None;
+        }
+    }
 
     if !st.started_ack && (state == vlc::STATE_PLAYING || time_ms > 0) {
         let uri = st.current_uri.clone().unwrap_or_default();
@@ -1264,6 +1556,9 @@ fn tick(engine: &mut vlc::Engine, st: &mut PlayState, sock: &mut Socket) {
         st.started_ack = true;
     }
 
+    if state == vlc::STATE_PLAYING && time_ms > 0 {
+        st.loading = false;
+    }
     if state == vlc::STATE_PLAYING && !st.tracks_applied {
         apply_tracks(engine, st);
     }
@@ -1284,6 +1579,14 @@ fn tick(engine: &mut vlc::Engine, st: &mut PlayState, sock: &mut Socket) {
         if let Some(uri) = st.current_uri.clone() {
             sock.send(json!({"f_type": 1, "s_type": 3, "url": uri}));
         }
+        if st.looping {
+            log("循环播放：回到开头");
+            engine.seek_ms(0);
+            engine.play();
+            st.finished = false;
+            st.stop_sent = false;
+            return;
+        }
         st.stop_sent = true;
         st.finished = true;
         return;
@@ -1292,6 +1595,10 @@ fn tick(engine: &mut vlc::Engine, st: &mut PlayState, sock: &mut Socket) {
         if !st.finished {
             log("libvlc 报告播放错误");
             st.finished = true;
+            st.loading = false;
+            if st.error.is_none() {
+                st.error = Some("libvlc 报告播放错误".to_string());
+            }
         }
         return;
     }
@@ -1324,7 +1631,12 @@ struct ControllerOptions {
     vlc_paths: vlc::VlcPaths,
 }
 
-fn controller(rx: Receiver<Event>, stream: TcpStream, opts: ControllerOptions) -> ExitCode {
+fn controller(
+    rx: Receiver<Event>,
+    stream: TcpStream,
+    opts: ControllerOptions,
+    ui: Arc<Mutex<Snapshot>>,
+) -> ExitCode {
     let mut sock = match Socket::new(stream) {
         Ok(s) => s,
         Err(e) => {
@@ -1364,6 +1676,17 @@ fn controller(rx: Receiver<Event>, stream: TcpStream, opts: ControllerOptions) -
             }
             Ok(Event::Command(cmd)) => handle_command(cmd, &mut engine, &mut st, &mut sock),
             Ok(Event::Net(v)) => {
+                // The app sends 100/0 (`send cookie params`) right after the
+                // socket is accepted and then waits for the player to speak:
+                // its heartbeat timer (`Ka`) only advances on incoming data,
+                // and the playList is pushed only after that. The official
+                // player answers with 5/2 ("give me the playList"). Without
+                // this the two sides deadlock and the app shows
+                // 「打开视频时发生错误」 after 40 s.
+                if field(&v, "f_type") == Some(100) {
+                    log("收到 100/0（cookie/apiHost），回 5/2 请求播放列表");
+                    sock.send(json!({"f_type": 5, "s_type": 2}));
+                }
                 quit = handle_message(&v, &mut engine, &mut st);
             }
             Ok(Event::NetClosed(reason)) => {
@@ -1374,10 +1697,11 @@ fn controller(rx: Receiver<Event>, stream: TcpStream, opts: ControllerOptions) -
             Err(RecvTimeoutError::Disconnected) => quit = true,
         }
         tick(&mut engine, &mut st, &mut sock);
-        if st.finished && !quit {
-            log("媒体已结束，退出播放器");
-            quit = true;
+        if let Ok(mut slot) = ui.lock() {
+            *slot = snapshot_of(&engine, &st);
         }
+        // 播完不退出：留在结束页等用户点「重播 / 下一集」或关窗。
+        // 退出仍由三条路径触发：f_type=0、socket 断开、窗口关闭（UI 线程发 Quit）。
     }
 
     if !st.stop_sent {
@@ -1481,11 +1805,14 @@ fn main() -> ExitCode {
     let window_id = window.id();
     log(format!("窗口已创建: 0x{window_id:x} {width}x{height} at {},{}", ui_opts.x, ui_opts.y));
 
+    let ui_state = Arc::new(Mutex::new(Snapshot::default()));
+    let ui_for_ctl = Arc::clone(&ui_state);
     let controller_opts = ControllerOptions { window_id: Some(window_id), ..controller_opts };
-    let handle = std::thread::spawn(move || controller(rx, stream, controller_opts));
+    let handle = std::thread::spawn(move || controller(rx, stream, controller_opts, ui_for_ctl));
 
     loop {
-        if !window.pump(&tx) {
+        let snap = ui_state.lock().map(|s| s.clone()).unwrap_or_default();
+        if !window.pump(&tx, &snap) {
             log("窗口关闭");
             let _ = tx.send(Event::Command(Command::Quit));
             break;

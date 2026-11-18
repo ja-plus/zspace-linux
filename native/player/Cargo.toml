@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 base64 = "0.22"
 libc = "0.2"
+cairo-rs = { version = "0.18", features = ["png"] }
 libloading = "0.8"
 serde_json = "1"
 x11rb = { version = "0.13", default-features = false, features = ["allow-unsafe-code"] }

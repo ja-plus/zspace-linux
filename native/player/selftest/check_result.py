@@ -181,6 +181,32 @@ def main():
     fshot = os.path.join(out, "shot-fullscreen.png")
     check("全屏截图存在", os.path.exists(fshot), fshot)
 
+    # --- 覆盖层：加载中 / 片头提示 / 结束页 / 错误页 ---
+    def read_log(name):
+        path = os.path.join(out, name)
+        if not os.path.exists(path):
+            return ""
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+
+    plog = read_log("player.log")
+    check("首帧前显示「正在加载」卡片", "提示卡片: 加载中" in plog)
+    check("出首帧后加载卡片收起", "提示卡片: 隐藏" in plog)
+    check("12/3 的 skip.start 触发片头提示", "跳过提示(跳过片头" in plog,
+          next((ln.strip() for ln in plog.splitlines() if "跳过提示" in ln), ""))
+    check("片头提示到点自动收起", "跳过提示(跳过片头" in plog and plog.count("提示卡片:") >= 3,
+          f"transitions={plog.count('提示卡片:')}")
+
+    endlog = read_log("end-player.log")
+    check("播放结束显示结束页", "覆盖层: 结束页(下一集=true)" in endlog,
+          next((ln.strip() for ln in endlog.splitlines() if "结束页" in ln), ""))
+    errlog = read_log("error-player.log")
+    check("8/1 显示错误页并带原因", "覆盖层: 错误页" in errlog and "转码服务不可用" in errlog,
+          next((ln.strip() for ln in errlog.splitlines() if "错误页" in ln), ""))
+    check("结束页/错误页截图存在",
+          os.path.exists(os.path.join(out, "shot-end.png"))
+          and os.path.exists(os.path.join(out, "shot-error.png")))
+
     print("\n===== 自测结果 =====")
     failures = 0
     for name, ok, detail in checks:

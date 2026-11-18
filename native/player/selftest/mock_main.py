@@ -271,10 +271,19 @@ class ControlHandler(socketserver.BaseRequestHandler):
         reply(self.server.subtitle_msg())
 
         deadline = time.time() + self.server.close_after
+        error_at = getattr(self.server, "error_after", 0.0)
+        error_sent = False
+        started = time.time()
         while time.time() < deadline and not stop.is_set():
             time.sleep(0.2)
             if state["closed"]:
                 break
+            if error_at > 0 and not error_sent and time.time() - started >= error_at:
+                error_sent = True
+                reply({"server": {"ip": "127.0.0.1", "port": self.server.port},
+                       "f_type": "8", "s_type": "1", "info_type": 1,
+                       "show_info": "播放失败，请稍后重试",
+                       "reason": "自测注入的错误：转码服务不可用"})
 
         if not state["closed"]:
             log({"dir": "main->player", "msg": {"f_type": 0}})
@@ -351,6 +360,12 @@ def main():
     parser.add_argument("--http-port", type=int, default=0)
     parser.add_argument("--close-after", type=float, default=22.0)
     parser.add_argument("--log", default=None)
+    parser.add_argument("--skip-start", type=float, default=0.0,
+                        help="12/3 collectionInfo.skip.start（秒），用于片头提示")
+    parser.add_argument("--skip-end", type=float, default=0.0,
+                        help="12/3 collectionInfo.skip.end（秒），用于片尾提示")
+    parser.add_argument("--error-after", type=float, default=0.0,
+                        help="N 秒后下发 8/1 播放错误，用于错误页")
     args = parser.parse_args()
     LOG_PATH = args.log
     if LOG_PATH and os.path.exists(LOG_PATH):
@@ -364,6 +379,7 @@ def main():
     srv.port = args.port
     srv.http_port = httpd.server_address[1]
     srv.close_after = args.close_after
+    srv.error_after = args.error_after
     srv.item = lambda **kw: build_item(
         args.port, httpd.server_address[1], args.media_dir, args.media, **kw
     )
@@ -382,7 +398,8 @@ def main():
         "f_type": "12", "s_type": "3", "code": 200,
         "collectionInfo": {
             "collection_id": "testcoll", "title": "自测合集",
-            "skip": {"previous": 0, "start": 0, "end": 0, "preview": 0},
+            "skip": {"previous": 0, "start": args.skip_start,
+                     "end": args.skip_end, "preview": 0},
             "history": {},
         },
     }

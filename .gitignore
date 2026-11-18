@@ -29,3 +29,6 @@ __pycache__/
 .vscode/
 .idea/
 *~
+
+# 会话工作目录
+.workbuddy/

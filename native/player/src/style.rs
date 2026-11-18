@@ -1,0 +1,199 @@
+//! 官方样式常量与图标资源。
+//!
+//! 所有数值都来自官方 `UZPlayer.exe` 里提取出来的 QSS 原文
+//! （`assets/official.qss`，由 `tools/extract_uzplayer_assets.py` 生成），
+//! 不是目测调出来的。图标是官方 `:/resource/...` 原图，80x80 的 2x 资源
+//! 在 40px 的按钮位上按比例缩放绘制。
+//!
+//! QSS 依据：
+//! - `QSlider::sub-page:horizontal { background: #425FFF; border-radius: 2px; }`
+//! - `QSlider::groove:horizontal { background: rgba(255,255,255,0.15); height: 4px; border-radius: 2px; }`
+//! - `QSlider::add-page:horizontal { background: rgba(228,228,228,0.15); }`
+//! - `QPushButton#btnSpeed { background: rgba(255,255,255,0.15); border-radius: 8px;
+//!    font-size: 16px; color: rgba(255,255,255,0.9); padding-left/right: 8px; }`
+//! - `QPushButton#btnFormat { font-size: 16px; color: rgba(255,255,255,0.9); padding: 0 8px; }`
+//! - `QWidget#widButtons { border-right: 1px solid rgba(255,255,255,0.15); }`
+//! - 弹层项 hover：`background: rgba(130,149,255,0.12); border-radius: 4px; font-size: 16px;`
+
+use cairo::{Context, ImageSurface};
+use std::collections::HashMap;
+use std::io::Cursor;
+
+/// 官方主色 #425FFF（进度条已播放段、选中态）
+pub const ACCENT: (f64, f64, f64) = (66.0 / 255.0, 95.0 / 255.0, 1.0);
+/// 进度条未播放轨道 rgba(255,255,255,0.15)
+pub const TRACK: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.15);
+/// 已播放段右侧的余量 rgba(228,228,228,0.15)
+pub const TRACK_ADD: (f64, f64, f64, f64) = (0.894, 0.894, 0.894, 0.15);
+/// 主文字色 rgba(255,255,255,0.9)
+pub const FG: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.9);
+/// 次要文字（标题等）比正文再压一档
+pub const FG_DIM: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.65);
+/// 官方字号：控制栏正文与弹层项都是 16px
+pub const FONT: f64 = 16.0;
+pub const FONT_SMALL: f64 = 14.0;
+/// 弹层项 hover/选中的底色 rgba(130,149,255,0.12)
+pub const MENU_SEL: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
+/// 悬停态文字（官方 hover 不改色，靠图标提供反馈；文字按钮 hover 才有底色）
+pub const HOVER_BG: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
+
+/// 控制栏图标位：资源是 80x80 的 2x 图，按 40px 显示。
+pub const ICON_SIZE: f64 = 40.0;
+
+macro_rules! icons {
+    ($(($key:literal, $path:literal)),* $(,)?) => {
+        const ICON_SOURCES: &[(&str, &[u8])] = &[
+            $(($key, include_bytes!(concat!("../assets/icons/", $path)))),*
+        ];
+    };
+}
+
+icons![
+    ("play", "controlbar/playWhite2x.png"),
+    ("play_hover", "controlbar/playHoverWhite2x.png"),
+    ("pause", "controlbar/pauseWhite2x.png"),
+    ("pause_hover", "controlbar/pauseHoverWhite2x.png"),
+    ("rewind", "controlbar/rewind2x.png"),
+    ("rewind_hover", "controlbar/rewindHover2x.png"),
+    ("forward", "controlbar/fastForward2x.png"),
+    ("forward_hover", "controlbar/fastForwardHover2x.png"),
+    ("prev", "controlbar/previousVideoWhite2x.png"),
+    ("prev_hover", "controlbar/previousVideoHoverWhite2x.png"),
+    ("prev_off", "controlbar/previousVideoWhiteDisable2x.png"),
+    ("next", "controlbar/nextVideoWhite2x.png"),
+    ("next_hover", "controlbar/nextVideoHoverWhite2x.png"),
+    ("next_off", "controlbar/nextVideoWhiteDisable2x.png"),
+    ("subtitle", "controlbar/subtitleWhite2x.png"),
+    ("subtitle_hover", "controlbar/subtitleHoverWhite2x.png"),
+    ("audio", "controlbar/audioTrackWhite2x.png"),
+    ("audio_hover", "controlbar/audioTrackHoverWhite2x.png"),
+    ("episode", "controlbar/episodesWhite2x.png"),
+    ("episode_hover", "controlbar/episodesHoverWhite2x.png"),
+    ("volume", "controlbar/volumeWhite2x.png"),
+    ("volume_hover", "controlbar/volumeHoverWhite2x.png"),
+    ("mute", "controlbar/muteWhite2x.png"),
+    ("mute_hover", "controlbar/muteHoverWhite2x.png"),
+    ("full", "controlbar/fullScreenWhite2x.png"),
+    ("full_hover", "controlbar/fullScreenHoverWhite2x.png"),
+    ("exit_full", "controlbar/exitFullScreenWhite2x.png"),
+    ("exit_full_hover", "controlbar/exitFullScreenHoverWhite2x.png"),
+    ("more", "controlbar/moreWhite2x.png"),
+    ("more_hover", "controlbar/moreHoverWhite2x.png"),
+    ("slider_handle", "controlbar/sliderbtn2x.png"),
+    ("close", "titlebar/winClose2x.png"),
+    ("close_hover", "titlebar/winCloseHover2x.png"),
+];
+
+pub struct IconSet {
+    map: HashMap<&'static str, ImageSurface>,
+}
+
+impl IconSet {
+    pub fn load() -> Self {
+        let mut map = HashMap::new();
+        for (key, bytes) in ICON_SOURCES {
+            let mut cur = Cursor::new(*bytes);
+            match ImageSurface::create_from_png(&mut cur) {
+                Ok(s) => {
+                    map.insert(*key, s);
+                }
+                Err(e) => eprintln!("图标 {key} 解析失败: {e}"),
+            }
+        }
+        IconSet { map }
+    }
+
+    #[allow(dead_code)]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    /// 以 (cx, cy) 为中心、边长 `size` 绘制。
+    pub fn draw_center(&self, ctx: &Context, key: &str, cx: f64, cy: f64, size: f64) {
+        let Some(surface) = self.map.get(key) else { return };
+        let (w, h) = (surface.width() as f64, surface.height() as f64);
+        let scale = size / w.max(h);
+        let _ = ctx.save();
+        let _ = ctx.translate(cx - w * scale / 2.0, cy - h * scale / 2.0);
+        let _ = ctx.scale(scale, scale);
+        let _ = ctx.set_source_surface(surface, 0.0, 0.0);
+        ctx.rectangle(0.0, 0.0, w, h);
+        let _ = ctx.fill();
+        let _ = ctx.restore();
+    }
+
+    #[allow(dead_code)]
+    pub fn has(&self, key: &str) -> bool {
+        self.map.contains_key(key)
+    }
+}
+
+/// 进度条：轨道 → 已播放 → 未播放余量 → 官方滑块图。
+pub fn draw_seek(
+    ctx: &Context,
+    icons: &IconSet,
+    left: f64,
+    right: f64,
+    y: f64,
+    frac: f64,
+) {
+    let w = right - left;
+    let frac = frac.clamp(0.0, 1.0);
+
+    // groove
+    ctx.new_path();
+    rounded_rect(ctx, left, y, w, 4.0, 2.0);
+    ctx.set_source_rgba(TRACK.0, TRACK.1, TRACK.2, TRACK.3);
+    let _ = ctx.fill();
+
+    // add-page（右侧未缓冲段，官方单独一个更亮的灰）
+    if frac < 1.0 {
+        ctx.new_path();
+        rounded_rect(ctx, left + w * frac, y, w * (1.0 - frac), 4.0, 2.0);
+        ctx.set_source_rgba(TRACK_ADD.0, TRACK_ADD.1, TRACK_ADD.2, TRACK_ADD.3);
+        let _ = ctx.fill();
+    }
+
+    // sub-page（已播放）
+    if frac > 0.0 {
+        ctx.new_path();
+        rounded_rect(ctx, left, y, w * frac, 4.0, 2.0);
+        ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
+        let _ = ctx.fill();
+    }
+
+    // 滑块：官方用 sliderbtn2x.png，不是画出来的圆点
+    icons.draw_center(ctx, "slider_handle", left + w * frac, y + 2.0, 16.0);
+}
+
+pub fn rounded_rect(ctx: &Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
+    let r = r.min(w / 2.0).min(h / 2.0);
+    ctx.new_sub_path();
+    ctx.arc(x + w - r, y + r, r, -std::f64::consts::FRAC_PI_2, 0.0);
+    ctx.arc(x + w - r, y + h - r, r, 0.0, std::f64::consts::FRAC_PI_2);
+    ctx.arc(x + r, y + h - r, r, std::f64::consts::FRAC_PI_2, std::f64::consts::PI);
+    ctx.arc(x + r, y + r, r, std::f64::consts::PI, 1.5 * std::f64::consts::PI);
+    ctx.close_path();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icons_load() {
+        let icons = IconSet::load();
+        assert_eq!(icons.len(), ICON_SOURCES.len(), "有图标没加载上");
+        for key in ["play", "pause", "volume", "slider_handle", "more"] {
+            assert!(icons.has(key), "{key} 缺失");
+        }
+    }
+
+    #[test]
+    fn accent_matches_qss() {
+        // #425FFF = (66, 95, 255) / 255
+        assert!((ACCENT.0 - 66.0 / 255.0).abs() < 1e-9);
+        assert!((ACCENT.1 - 95.0 / 255.0).abs() < 1e-9);
+        assert!((ACCENT.2 - 1.0).abs() < 1e-9);
+    }
+}
