@@ -1859,3 +1859,59 @@
   重跑一次（前台、留完整日志）就成功了 —— 说明脚本本身没问题。
 - 排查用的判据：`stage` 有 412MB、手动 `dpkg-deb --build` 能出包，
   就说明不是 stage 内容问题，而是执行期被并发破坏。
+
+## 2026-11-18 快捷笔记不该出现在 Dock（native.21）
+
+- 用户反馈：快捷笔记（桌面悬浮笔记小窗）在 Dock 栏里有图标，不该有。
+- 真因：官方代码里其实调了 `Eo.setSkipTaskbar(!0)`，但 **Electron 的 setSkipTaskbar
+  只在 Windows/macOS 有实现，Linux 是空操作**。实测本机（DDE + kwin_x11 + Electron 33.3.1）：
+  窗口创建后立即 / `ready-to-show` / 延迟 1.5 s 三种时机调用，窗口 `_NET_WM_STATE` 里
+  始终没有 `_NET_WM_STATE_SKIP_TASKBAR`（只有 alwaysOnTop 带来的
+  `_NET_WM_STATE_ABOVE, _NET_WM_STATE_STAYS_ON_TOP`）。
+- 修法：`patch_app.py` 新增 `memo-utility-window` —— 笔记窗构造时带
+  `type:"linux"==process.platform?"utility":void 0`。dde-shell 的 dock 任务栏
+  （`/usr/lib/x86_64-linux-gnu/dde-shell/org.deepin.ds.dock.taskmanager.so`）是按
+  `_NET_WM_WINDOW_TYPE` 过滤的（.so 里带 TOOLBAR/UTILITY/MENU/SPLASH/NOTIFICATION 一串
+  atom），非 NORMAL 的窗口不进任务栏。
+- 验证方法（可重复）：拿同版本 Electron 跑最小复现窗（普通 vs `type:"utility"`），
+  截图 Dock 对比「图标下方的小短横线」数量 —— 普通窗口多一条，utility 不多；
+  两种类型都能正常拿焦点（`xdotool windowactivate` → focus 事件到位）。
+  改完的实机验证：`bash native/run-native.sh` 起开发版后
+  `xprop -id <笔记窗> _NET_WM_WINDOW_TYPE` → `_NET_WM_WINDOW_TYPE_UTILITY` ✅。
+- 产物 native.21：`build/com.zspace.native.spark_2.46.2026101501+native.21-1_amd64.deb`
+  117,398,260 B；SHA256 `c89a423d8d799e5cf00903bfb9f1c9d1ee148c36b1d5277ba0dd1d07ef15ac61`；
+  自检 55 项全 PASS。**未安装**（sudo 需要密码）。
+- 踩坑：`bash scripts/build_native_deb.sh` 在本会话里直接失败（exit 126）——
+  注入的 safe-delete 垫片的 `rm` 权限不够，开头清 work 目录就挂。要用
+  `unset -f rm; export BASH_ENV=/dev/null;` 再跑。另外 `--out /tmp/xxx` 打包再
+  `cp` 回 build/ 依旧是不踩 `dpkg-deb` 报 tar stat 的老办法。
+- 踩坑：**别用 `/opt/durapps/.../files/electron/electron` 直接跑自己的测试 app** ——
+  它旁边有 `resources/app`，永远加载官方 app，会抢单实例锁并把用户正在用的客户端踢掉
+  （本次 21:45 就这么把用户的极空间关掉了）。要测最小复现，用 `/tmp/el/electron`
+  （拷出来并删掉 `resources/app` 的那份）。
+
+## 2026-11-18 发现 exe 里保留了 C++ 符号表（功能清单大补）
+
+用户问「Windows 版的功能都总结过吗」，顺手扫字符串时发现 `UZPlayer.exe`
+里**没有 strip 掉 Qt moc 的符号名**：形如 `ControlBar::on_btnVolume_clicked`、
+`MainWindow::registerBossHotKey`。这是比 QSS 更有价值的一层 ——
+QSS 只知道「长什么样」，符号表知道「有哪些类、每类管什么」。
+
+- 工具：`native/player/tools/extract_symbols.py`（正则提 `Class::method`，
+  过滤 Qt/std 前缀，按弹层/协议/快捷键/定时器/控件槽分类）。
+- 产物：`docs/PLAYER-INTERNALS.md`（403 行，14 个类 285 个方法，可复现）。
+- 识别到的类：MainWindow(223)、TitleBar(9)、VideoListPopup(8)、Vlc(8)、
+  SetCommon(8)、ControlBar(5)、HttpPlugin(5)、LiveListPopup(4)、
+  SubtitleSearchPopup(4)、SubtitlePopup(3)、ConfigPopup(2)、EpisodeItem(2)、
+  SubtitleSearchList(2)、SubtitleSetPopup(2)。
+- **补出 14 个之前完全没记录的功能**（都没有独立图标，所以照 QSS 看不出来）：
+  老板键 `registerBossHotKey`、预约定时 `ScheduledTimerPopup*`、
+  PGS 图形字幕 `TcpRecvDownloadPgsSubtitle`、蓝光章节 `BlurayListPopupSelectSlot`、
+  直播多码流 `switchLiveStreamByIndex`、音量百分比 `ShowVolumePercent`、
+  复制视频信息 `CopyVideoInfo`、字幕继承 `inheritSubtitles`/`SetRecordSubtitle`、
+  清缓存 `clearPlayerCache`、快捷键开关 `ConfigSetShortcutEnableSlot`、
+  窗口三态 `Fullmized/Maximized/Normalmized`、360 视角、
+  完整快捷键（15 个 `KeyPress*`）、空闲隐藏。
+- **教训**：以后列功能清单，先扫符号表再扫资源。只有图标/QSS 的话，
+  纯逻辑功能（老板键、定时、字幕记忆）会整块漏掉。
+- 已补进 `docs/PLAYER-FEATURE-PARITY.md` 第 2.5 节。

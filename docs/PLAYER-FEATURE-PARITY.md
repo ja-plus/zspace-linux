@@ -37,6 +37,30 @@
 | `SubtitleSearchPopup` | 搜索框 + 结果列表 + 下载 | `9/1`~`9/7` | ⬜ 未做 |
 | `LiveListPopup` | 直播分组/频道列表 | 直播协议（未实现） | ⬜ 未做 |
 
+## 2.5 之前漏掉的功能（2026-11-18 从符号表补）
+
+前面两张表是照 QSS 对象名和图标名整理的，**只覆盖「有控件的东西」**。
+后来从 exe 里残留的 C++ 符号（Qt moc 元信息）扒出 14 个类 285 个方法，
+发现下面这些功能一个都没记进去 —— 它们没有独立图标，所以之前看不见。
+完整清单见 `PLAYER-INTERNALS.md`。
+
+| 功能 | 符号证据 | 说明 | 我们现状 |
+|---|---|---|---|
+| 老板键 | `registerBossHotKey` | 一键隐藏窗口 | ⬜ |
+| 预约定时 | `ScheduledTimerPopupCloseSlot` / `SettingSlot` / `PlaySlot`、`showScheduledTimerPopup` | 定时关闭/定时播放 | ⬜ |
+| PGS 图形字幕 | `TcpRecvDownloadPgsSubtitle`、`TcpRecvSwitchPgsSubtitle` | 蓝光字幕单独下载与切换 | ⬜ |
+| 蓝光章节 | `BlurayListPopupSelectSlot`、`VBlurayListPlayVideo` | 章节列表播放 | ⬜ |
+| 直播多码流 | `switchLiveStreamByIndex`、`liveReconnect`、`scheduleLiveReconnect` | 断流重连 + 切码流 | ⬜（直播整体未做） |
+| 音量百分比提示 | `ShowVolumePercent` | 调音量时浮层显示 % | ⬜ |
+| 复制视频信息 | `CopyVideoInfo`、`TitleBarVideoInfo` | 复制编码/码率等信息 | ⬜ |
+| 字幕继承 | `inheritSubtitles`、`incrementalUpdateSubtitles`、`SetRecordSubtitle` | 换集沿用字幕选择并记住 | ⬜ |
+| 清播放缓存 | `clearPlayerCache` | | ⬜ |
+| 快捷键开关 | `ConfigSetShortcutEnableSlot` | 设置里能关掉快捷键 | ⬜ |
+| 窗口三态 | `Fullmized` / `Maximized` / `Normalmized` / `MinApp` | 全屏、最大化、还原是三个独立状态 | 🟡 只有全屏 |
+| 360 视角 | `ApplyVideo360Viewpoint`、`PlayerVideo360Changed` | | ⬜ |
+| 空闲隐藏 | `TimerHidectlTimeOut`、`TimerMouseClickTimeOut` | 鼠标空闲隐藏控制栏（已有类似逻辑） | ✅ |
+| 完整快捷键 | `KeyPressAltD` `CtrlEnter` `CtrlM` `CtrlX` `CtrlPlus/Minus` `PageUp/Down` `ShiftPlus/Minus` 等 15 个 | 见 `PLAYER-INTERNALS.md` | 🟡 只做了常用几个 |
+
 ## 3. 其它界面
 
 | 官方 | 说明 | 我们现状 |
