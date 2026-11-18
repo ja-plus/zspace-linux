@@ -37,8 +37,6 @@ pub const LABEL: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.55);
 pub const FONT_LABEL: f64 = 14.0;
 /// 弹层项 hover/选中的底色 rgba(130,149,255,0.12)
 pub const MENU_SEL: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
-/// 悬停态文字（官方 hover 不改色，靠图标提供反馈；文字按钮 hover 才有底色）
-pub const HOVER_BG: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
 /// 分隔线 rgba(255,255,255,0.15)（widTitle / widDetail / widButtons 共用）
 pub const DIVIDER: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.15);
 
@@ -53,8 +51,8 @@ pub const CONTROL_BASE: (f64, f64, f64) = (20.0 / 255.0, 22.0 / 255.0, 32.0 / 25
 pub const POPUP_RADIUS: f64 = 8.0;
 pub const POPUP_BORDER: (f64, f64, f64, f64) = (179.0 / 255.0, 193.0 / 255.0, 205.0 / 255.0, 0.15);
 
-/// 控制栏图标位：资源是 80x80 的 2x 图，按 40px 显示。
-pub const ICON_SIZE: f64 = 40.0;
+/// 控制栏图标尺寸：资源是 80x80 的 2x 图，官方界面上量到约 24px。
+pub const ICON_SIZE: f64 = 28.0;
 
 macro_rules! icons {
     ($(($key:literal, $path:literal)),* $(,)?) => {

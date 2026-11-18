@@ -9,7 +9,7 @@
 //! audio · quality · episodes · volume+slider · fullscreen · close.
 
 use crate::style::{
-    self, IconSet, ACCENT, FG, FG_DIM, FONT, FONT_LABEL, FONT_SMALL, HOVER_BG, ICON_SIZE, MENU_SEL,
+    self, IconSet, ACCENT, FG, FG_DIM, FONT, FONT_LABEL, FONT_SMALL, ICON_SIZE, MENU_SEL,
 };
 use crate::{Command, MenuKind};
 use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
@@ -19,12 +19,14 @@ use x11rb::protocol::xproto::{
 };
 use x11rb::rust_connection::RustConnection;
 
-/// 官方控制栏高度（QSS 里没有，按原实现的 76px 保留）
-pub const BAR_H: u16 = 76;
+/// 控制栏高度：按 Windows 版实测（视频底部到窗口底约 96px）
+pub const BAR_H: u16 = 96;
+/// 按钮位宽度：官方图标中心间距实测 56px
+const BTN_SLOT: f64 = 56.0;
 /// 倍速档位（官方 6 档，一位小数起步）
 const RATES: [f32; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-const MENU_W: u16 = 220;
-const MENU_ROW: f64 = 36.0;
+const MENU_W: u16 = 258;
+const MENU_ROW: f64 = 48.0;
 /// 弹层标题栏高度（官方 QWidget#widTitle + QLabel 14px 的组合）
 const MENU_HEAD: f64 = 38.0;
 /// 官方 ConfigPopup 是「很大的一个面板」，不是小列表
@@ -67,6 +69,7 @@ pub struct Snapshot {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(dead_code)]
 enum Btn {
     PlayPause,
     Rewind,
@@ -356,9 +359,10 @@ impl ControlBar {
     }
 
     fn draw_seek(&mut self, ctx: &Context, snap: &Snapshot, w: i32) {
-        let left = 16.0;
-        let right = w as f64 - 16.0;
-        let y = 14.0;
+        // Windows 版实测：左右边距 20px，线在控制栏顶部往下约 22px 处
+        let left = 20.0;
+        let right = w as f64 - 20.0;
+        let y = 22.0;
         let frac = if snap.len_ms > 0 {
             (snap.pos_ms as f64 / snap.len_ms as f64).clamp(0.0, 1.0)
         } else {
@@ -374,9 +378,10 @@ impl ControlBar {
     }
 
     fn draw_buttons(&mut self, ctx: &Context, snap: &Snapshot, w: i32, h: i32) {
-        // 图标位 40x40（官方资源是 80x80 的 2x 图），行中心落在进度条下方
-        let cy = h as f64 - 30.0;
-        let mut x = 12.0;
+        // 布局按 Windows 版实测：按钮位 56px、图标 24px、行中心距底 32px、
+        // 左起第一个按钮中心距左边 36px（即 slot 从 8 开始）
+        let cy = h as f64 - 32.0;
+        let mut x = 8.0;
 
         let (play_k, play_h) = if snap.playing {
             ("pause", "pause_hover")
@@ -386,17 +391,14 @@ impl ControlBar {
         self.icon_btn(ctx, &mut x, cy, Btn::PlayPause, play_k, play_h, None, true);
         self.icon_btn(ctx, &mut x, cy, Btn::Rewind, "rewind", "rewind_hover", None, true);
         self.icon_btn(ctx, &mut x, cy, Btn::Forward, "forward", "forward_hover", None, true);
-        self.vsep(ctx, &mut x, cy);
-        self.icon_btn(ctx, &mut x, cy, Btn::Prev, "prev", "prev_hover", Some("prev_off"), snap.has_prev);
-        self.icon_btn(ctx, &mut x, cy, Btn::Next, "next", "next_hover", Some("next_off"), snap.has_next);
 
-        // 时间 / 标题：官方字号 16 / 14px
+        // 时间：官方 `HH:MM:SS / HH:MM:SS`，14px，紧跟快进按钮
         let time = format!("{} / {}", fmt_time(snap.pos_ms), fmt_time(snap.len_ms));
-        x += 6.0;
-        self.text_a(ctx, &time, x, cy + FONT / 2.8, FONT_SMALL, FG);
-        x += self.text_width(ctx, &time, FONT_SMALL) + 14.0;
+        x += 9.0;
+        self.text_a(ctx, &time, x, cy + FONT_SMALL / 2.8, FONT_SMALL, FG);
+        x += self.text_width(ctx, &time, FONT_SMALL) + 16.0;
         if !snap.title.is_empty() {
-            let max_w = (w as f64 * 0.28).max(80.0);
+            let max_w = (w as f64 * 0.26).max(80.0);
             let mut t = snap.title.clone();
             while self.text_width(ctx, &t, FONT_SMALL) > max_w && t.chars().count() > 4 {
                 let cut = t
@@ -407,58 +409,56 @@ impl ControlBar {
                 t.truncate(cut);
                 t.push('…');
             }
-            self.text_a(ctx, &t, x, cy + FONT / 2.8, FONT_SMALL, FG_DIM);
+            self.text_a(ctx, &t, x, cy + FONT_SMALL / 2.8, FONT_SMALL, FG_DIM);
         }
 
-        // 右簇（从右往左）：更多 · 全屏 · 音量 · | · 选集 · 音轨 · 字幕 · 倍速 · 清晰度
-        // 官方控制栏没有关闭按钮（关闭在标题栏），这里也不放
-        let mut rx = w as f64 - 8.0;
-        rx = self.icon_right(ctx, rx, cy, Btn::More, "more", "more_hover", None, true, ICON_SIZE);
+        // 右簇（从右往左）：全屏 · 音量 · 设置 · 音轨 · 选集 · 原画 · 倍速
+        // 官方控制栏没有关闭、没有字幕按钮、没有「⋯」，齿轮就是设置入口
+        let mut rx = w as f64;
         let (fs_k, fs_h) = if snap.fullscreen {
             ("exit_full", "exit_full_hover")
         } else {
             ("full", "full_hover")
         };
-        rx = self.icon_right(ctx, rx, cy, Btn::Fullscreen, fs_k, fs_h, None, true, ICON_SIZE);
-
+        rx = self.icon_right(ctx, rx, cy, Btn::Fullscreen, fs_k, fs_h, None, true);
         let (vol_k, vol_h) = if snap.muted {
             ("mute", "mute_hover")
         } else {
             ("volume", "volume_hover")
         };
-        rx = self.icon_right(ctx, rx, cy, Btn::Volume, vol_k, vol_h, None, true, ICON_SIZE);
-
-        // 音量滑杆：与进度条同一套 QSS 口径（4px、圆角 2、已播放段 #425FFF）
-        rx -= 4.0;
-        let vw = 72.0;
-        rx -= vw;
-        let vfrac = (snap.volume.clamp(0, 100) as f64 / 100.0).clamp(0.0, 1.0);
-        ctx.new_path();
-        style::rounded_rect(ctx, rx, cy - 2.0, vw, 4.0, 2.0);
-        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.15);
-        let _ = ctx.fill();
-        if vfrac > 0.0 {
-            ctx.new_path();
-            style::rounded_rect(ctx, rx, cy - 2.0, vw * vfrac, 4.0, 2.0);
-            ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
-            let _ = ctx.fill();
-        }
-        self.hits.push(Hit {
-            rect: ((rx - 4.0) as i16, (cy - 10.0) as i16, (vw + 8.0) as i16, 20),
-            btn: Btn::VolumeSlider,
-            index: 0,
-        });
-        rx = self.vsep_right(ctx, rx, cy);
-
-        rx = self.icon_right(ctx, rx, cy, Btn::Episode, "episode", "episode_hover", None, true, ICON_SIZE);
-        rx = self.icon_right(ctx, rx, cy, Btn::Audio, "audio", "audio_hover", None, true, ICON_SIZE);
-        rx = self.icon_right(ctx, rx, cy, Btn::Subtitle, "subtitle", "subtitle_hover", None, true, ICON_SIZE);
-        // 倍速：官方是文字胶囊（btnSpeed: bg rgba(255,255,255,.15)、r8、16px）
-        rx = self.pill_right(ctx, rx, cy, Btn::Rate, &fmt_rate(snap.rate), true);
-        // 清晰度：官方 btnFormat 是纯文字按钮（16px，无底色，padding 8）
-        let qual = label_or(&snap.quality, "清晰度");
-        rx = self.pill_right(ctx, rx, cy, Btn::Quality, &qual, false);
+        let vol_slot = rx - BTN_SLOT;
+        rx = self.icon_right(ctx, rx, cy, Btn::Volume, vol_k, vol_h, None, true);
+        rx = self.icon_right(ctx, rx, cy, Btn::More, "more", "more_hover", None, true);
+        rx = self.icon_right(ctx, rx, cy, Btn::Audio, "audio", "audio_hover", None, true);
+        rx = self.icon_right(ctx, rx, cy, Btn::Episode, "episode", "episode_hover", None, true);
+        rx = self.text_btn_right(ctx, rx, cy, Btn::Quality, &label_or(&snap.quality, "原画"));
+        rx = self.text_btn_right(ctx, rx, cy, Btn::Rate, &fmt_rate(snap.rate));
         let _ = rx;
+
+        // 音量滑杆默认不占位（官方平时看不到），鼠标悬停喇叭时才浮出来
+        if self.hover == Some(Btn::Volume) {
+            let vw = 76.0;
+            let vx = vol_slot + BTN_SLOT / 2.0 + ICON_SIZE / 2.0 + 8.0;
+            let vfrac = (snap.volume.clamp(0, 100) as f64 / 100.0).clamp(0.0, 1.0);
+            ctx.set_source_rgba(0.0, 0.0, 0.0, 0.55);
+            ctx.rectangle(vx - 6.0, cy - 12.0, vw + 12.0, 24.0);
+            let _ = ctx.fill();
+            ctx.new_path();
+            style::rounded_rect(ctx, vx, cy - 2.0, vw, 4.0, 2.0);
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.15);
+            let _ = ctx.fill();
+            if vfrac > 0.0 {
+                ctx.new_path();
+                style::rounded_rect(ctx, vx, cy - 2.0, vw * vfrac, 4.0, 2.0);
+                ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
+                let _ = ctx.fill();
+            }
+            self.hits.push(Hit {
+                rect: ((vx - 6.0) as i16, (cy - 12.0) as i16, (vw + 12.0) as i16, 24),
+                btn: Btn::VolumeSlider,
+                index: 0,
+            });
+        }
     }
 
     fn text_a(&self, ctx: &Context, s: &str, x: f64, y: f64, size: f64, color: (f64, f64, f64, f64)) {
@@ -467,23 +467,6 @@ impl ControlBar {
         ctx.set_source_rgba(color.0, color.1, color.2, color.3);
         ctx.move_to(x, y);
         let _ = ctx.show_text(s);
-    }
-
-    /// 竖分隔线（官方 QWidget#widButtons 的 1px 右边框）
-    fn vsep(&mut self, ctx: &Context, x: &mut f64, cy: f64) {
-        *x += 6.0;
-        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.15);
-        ctx.rectangle(*x, cy - 10.0, 1.0, 20.0);
-        let _ = ctx.fill();
-        *x += 10.0;
-    }
-
-    fn vsep_right(&mut self, ctx: &Context, rx: f64, cy: f64) -> f64 {
-        let x = rx - 8.0;
-        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.15);
-        ctx.rectangle(x, cy - 10.0, 1.0, 20.0);
-        let _ = ctx.fill();
-        x - 9.0
     }
 
     fn icon_btn(
@@ -497,7 +480,7 @@ impl ControlBar {
         disabled: Option<&str>,
         enabled: bool,
     ) {
-        let cx = *x + ICON_SIZE / 2.0;
+        let cx = *x + BTN_SLOT / 2.0;
         if enabled {
             let key = if self.hover == Some(btn) { hover } else { normal };
             self.icons.draw_center(ctx, key, cx, cy, ICON_SIZE);
@@ -505,11 +488,11 @@ impl ControlBar {
             self.icons.draw_center(ctx, off, cx, cy, ICON_SIZE);
         }
         self.hits.push(Hit {
-            rect: (*x as i16, (cy - ICON_SIZE / 2.0) as i16, ICON_SIZE as i16, ICON_SIZE as i16),
+            rect: (*x as i16, (cy - BTN_SLOT / 2.0) as i16, BTN_SLOT as i16, BTN_SLOT as i16),
             btn,
             index: 0,
         });
-        *x += ICON_SIZE + 2.0;
+        *x += BTN_SLOT;
     }
 
     fn icon_right(
@@ -522,58 +505,54 @@ impl ControlBar {
         hover: &str,
         disabled: Option<&str>,
         enabled: bool,
-        size: f64,
     ) -> f64 {
-        rx -= size;
-        let cx = rx + size / 2.0;
+        rx -= BTN_SLOT;
+        let cx = rx + BTN_SLOT / 2.0;
         if enabled {
             let key = if self.hover == Some(btn) { hover } else { normal };
-            self.icons.draw_center(ctx, key, cx, cy, size);
+            self.icons.draw_center(ctx, key, cx, cy, ICON_SIZE);
         } else if let Some(off) = disabled {
-            self.icons.draw_center(ctx, off, cx, cy, size);
+            self.icons.draw_center(ctx, off, cx, cy, ICON_SIZE);
         }
         self.hits.push(Hit {
-            rect: (rx as i16, (cy - size / 2.0) as i16, size as i16, size as i16),
+            rect: (rx as i16, (cy - BTN_SLOT / 2.0) as i16, BTN_SLOT as i16, BTN_SLOT as i16),
             btn,
             index: 0,
         });
-        rx - 2.0
+        rx
     }
 
-    /// 右对齐文字按钮：`filled` 为真时带官方 btnSpeed 的胶囊底色。
-    fn pill_right(&mut self, ctx: &Context, rx: f64, cy: f64, btn: Btn, label: &str, filled: bool) -> f64 {
-        let tw = self.text_width(ctx, label, FONT);
-        let pad = 8.0;
-        let bw = tw + pad * 2.0;
-        let bh = 28.0;
+    /// 右对齐的纯文字按钮（官方的倍速、清晰度都是这种：平时无底色，hover 才有淡块）
+    fn text_btn_right(&mut self, ctx: &Context, rx: f64, cy: f64, btn: Btn, label: &str) -> f64 {
+        let tw = self.text_width(ctx, label, FONT_SMALL);
+        let bw = (tw + 32.0).max(BTN_SLOT);
         let x = rx - bw;
-        if filled {
+        let hovered = self.hover == Some(btn);
+        if hovered {
             ctx.new_path();
-            style::rounded_rect(ctx, x, cy - bh / 2.0, bw, bh, 8.0);
-            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.15);
-            let _ = ctx.fill();
-        } else if self.hover == Some(btn) {
-            ctx.new_path();
-            style::rounded_rect(ctx, x, cy - bh / 2.0, bw, bh, 8.0);
-            ctx.set_source_rgba(HOVER_BG.0, HOVER_BG.1, HOVER_BG.2, HOVER_BG.3);
+            style::rounded_rect(ctx, x + 2.0, cy - 18.0, bw - 4.0, 36.0, 8.0);
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
             let _ = ctx.fill();
         }
-        self.text_a(ctx, label, x + pad, cy + FONT / 2.8, FONT, FG);
+        let color = if hovered { (1.0, 1.0, 1.0, 1.0) } else { FG };
+        self.text_a(ctx, label, x + (bw - tw) / 2.0, cy + FONT_SMALL / 2.8, FONT_SMALL, color);
         self.hits.push(Hit {
-            rect: (x as i16, (cy - bh / 2.0) as i16, bw as i16, bh as i16),
+            rect: (x as i16, (cy - 18.0) as i16, bw as i16, 36),
             btn,
             index: 0,
         });
-        x - 4.0
+        x
     }
 
     // ------------------------------------------------------------------ menu
 
     pub fn open_menu(&mut self, conn: &RustConnection, kind: MenuKind, snap: &Snapshot) {
         let items: Vec<(String, bool)> = match kind {
-            MenuKind::Speed => [0.5f32, 0.75, 1.0, 1.25, 1.5, 2.0]
+            // 官方倍速列表是降序：2.0x 在最上面
+            MenuKind::Speed => RATES
                 .iter()
-                .map(|r| (format!("{r:.2}x"), (snap.rate - r).abs() < 0.01))
+                .rev()
+                .map(|r| (fmt_rate(*r), (snap.rate - r).abs() < 0.01))
                 .collect(),
             MenuKind::Quality => snap.qualities.clone(),
             MenuKind::Audio => snap.audios.clone(),
@@ -596,7 +575,7 @@ impl ControlBar {
         let (mw, h) = if kind == MenuKind::More {
             (PANEL_W, PANEL_H)
         } else {
-            (MENU_W, (MENU_HEAD + items.len() as f64 * MENU_ROW + 8.0) as u16)
+            (MENU_W, (8.0 + items.len() as f64 * MENU_ROW + 8.0) as u16)
         };
         let _ = &items;
         let x = (self.abs_x + self.anchor_x - mw as i16 / 2)
@@ -649,49 +628,48 @@ impl ControlBar {
             style::rounded_rect(&ctx, 0.5, 0.5, mw as f64 - 1.0, mh as f64 - 1.0, style::POPUP_RADIUS);
             let _ = ctx.stroke();
 
-            // 标题栏：官方 widTitle 是 14px 55% 白 + 底部 1px 分隔线
-            self.text_a(
-                &ctx,
-                menu_title(kind),
-                14.0,
-                MENU_HEAD / 2.0 + FONT_LABEL / 2.8,
-                FONT_LABEL,
-                style::LABEL,
-            );
-            ctx.set_source_rgba(
-                style::DIVIDER.0,
-                style::DIVIDER.1,
-                style::DIVIDER.2,
-                style::DIVIDER.3,
-            );
-            ctx.rectangle(1.0, MENU_HEAD, mw as f64 - 2.0, 1.0);
-            let _ = ctx.fill();
-            // 关闭叉：手绘两根线。
-            // 官方资源里没有干净的 20px 叉 —— titlebar/winClose2x.png 是 104x88
-            // 的按钮整图，缩到 20px 叉的笔画就没了；popup/popupClose2x 又因为那一段
-            // 映射串位、提取出来是下箭头。这里直接画，颜色和粗细都可控。
-            let close_hover = self.menu_hover == Some(usize::MAX);
-            let cx = mw as f64 - 20.0;
-            let cy = MENU_HEAD / 2.0;
-            if close_hover {
-                ctx.new_path();
-                let _ = ctx.arc(cx, cy, 12.0, 0.0, std::f64::consts::TAU);
-                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+            // 只有「播放设置」大面板有标题栏（官方 widTitle + btnClose）；
+            // 倍速/清晰度/音轨/选集这些弹层是无标题栏的单选列表
+            if kind == MenuKind::More {
+                self.text_a(
+                    &ctx,
+                    menu_title(kind),
+                    14.0,
+                    MENU_HEAD / 2.0 + FONT_LABEL / 2.8,
+                    FONT_LABEL,
+                    style::LABEL,
+                );
+                ctx.set_source_rgba(
+                    style::DIVIDER.0,
+                    style::DIVIDER.1,
+                    style::DIVIDER.2,
+                    style::DIVIDER.3,
+                );
+                ctx.rectangle(1.0, MENU_HEAD, mw as f64 - 2.0, 1.0);
                 let _ = ctx.fill();
+                let close_hover = self.menu_hover == Some(usize::MAX);
+                let cx = mw as f64 - 20.0;
+                let cy = MENU_HEAD / 2.0;
+                if close_hover {
+                    ctx.new_path();
+                    let _ = ctx.arc(cx, cy, 12.0, 0.0, std::f64::consts::TAU);
+                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+                    let _ = ctx.fill();
+                }
+                ctx.new_path();
+                ctx.set_line_width(1.6);
+                ctx.set_source_rgba(1.0, 1.0, 1.0, if close_hover { 1.0 } else { 0.78 });
+                ctx.move_to(cx - 6.0, cy - 6.0);
+                ctx.line_to(cx + 6.0, cy + 6.0);
+                ctx.move_to(cx + 6.0, cy - 6.0);
+                ctx.line_to(cx - 6.0, cy + 6.0);
+                let _ = ctx.stroke();
+                self.menu_hits.push(Hit {
+                    rect: ((mw - 32) as i16, 4, 28, (MENU_HEAD - 8.0) as i16),
+                    btn: Btn::MenuClose,
+                    index: 0,
+                });
             }
-            ctx.new_path();
-            ctx.set_line_width(1.6);
-            ctx.set_source_rgba(1.0, 1.0, 1.0, if close_hover { 1.0 } else { 0.78 });
-            ctx.move_to(cx - 6.0, cy - 6.0);
-            ctx.line_to(cx + 6.0, cy + 6.0);
-            ctx.move_to(cx + 6.0, cy - 6.0);
-            ctx.line_to(cx - 6.0, cy + 6.0);
-            let _ = ctx.stroke();
-            self.menu_hits.push(Hit {
-                rect: ((mw - 32) as i16, 4, 28, (MENU_HEAD - 8.0) as i16),
-                btn: Btn::MenuClose,
-                index: 0,
-            });
 
             if kind == MenuKind::More {
                 let snap = self.last.clone().unwrap_or_default();
@@ -699,15 +677,30 @@ impl ControlBar {
             } else {
             let items = self.menu.as_ref().map(|m| m.items.clone()).unwrap_or_default();
             for (i, (label, selected)) in items.iter().enumerate() {
-                let ty = MENU_HEAD + 4.0 + i as f64 * MENU_ROW;
+                let ty = 8.0 + i as f64 * MENU_ROW;
+                let cy = ty + MENU_ROW / 2.0;
                 let hovered = self.menu_hover == Some(i);
-                if *selected || hovered {
-                    // 官方：item:hover 与 selected 都上底色，选中更实一点
-                    let alpha = if *selected { 0.22 } else { MENU_SEL.3 };
+                if hovered {
                     ctx.new_path();
-                    style::rounded_rect(&ctx, 5.0, ty, mw as f64 - 10.0, MENU_ROW - 4.0, 4.0);
-                    ctx.set_source_rgba(MENU_SEL.0, MENU_SEL.1, MENU_SEL.2, alpha);
+                    style::rounded_rect(&ctx, 6.0, ty + 2.0, mw as f64 - 12.0, MENU_ROW - 4.0, 6.0);
+                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.08);
                     let _ = ctx.fill();
+                }
+                // 官方是单选圆圈：选中 = 主色实心 + 白点，未选 = 灰色空心
+                let cx = 18.0;
+                ctx.new_path();
+                let _ = ctx.arc(cx, cy, 7.0, 0.0, std::f64::consts::TAU);
+                if *selected {
+                    ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
+                    let _ = ctx.fill();
+                    ctx.new_path();
+                    let _ = ctx.arc(cx, cy, 2.8, 0.0, std::f64::consts::TAU);
+                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95);
+                    let _ = ctx.fill();
+                } else {
+                    ctx.set_line_width(1.4);
+                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.35);
+                    let _ = ctx.stroke();
                 }
                 let color = if *selected || hovered {
                     (1.0, 1.0, 1.0, 1.0)
@@ -715,15 +708,18 @@ impl ControlBar {
                     FG
                 };
                 let mut t = label.clone();
-                while self.text_width(&ctx, &t, FONT) > mw as f64 - 36.0 && t.chars().count() > 3 {
-                    let cut = t.char_indices().nth(t.chars().count().saturating_sub(2)).map(|(c, _)| c).unwrap_or(0);
+                while self.text_width(&ctx, &t, FONT) > mw as f64 - 60.0 && t.chars().count() > 3 {
+                    let cut = t
+                        .char_indices()
+                        .nth(t.chars().count().saturating_sub(2))
+                        .map(|(c, _)| c)
+                        .unwrap_or(0);
                     t.truncate(cut);
                     t.push('…');
                 }
-                // 官方弹层项 font-size 16px、padding-left 12px
-                self.text_a(&ctx, &t, 17.0, ty + (MENU_ROW - 4.0) / 2.0 + FONT / 2.8, FONT, color);
+                self.text_a(&ctx, &t, 46.0, cy + FONT_SMALL / 2.8, FONT, color);
                 self.menu_hits.push(Hit {
-                    rect: (5, ty as i16, (mw - 10) as i16, (MENU_ROW - 4.0) as i16),
+                    rect: (6, ty as i16, (mw - 12) as i16, MENU_ROW as i16),
                     btn: Btn::MenuItem,
                     index: i,
                 });
@@ -901,10 +897,11 @@ impl ControlBar {
             };
         }
         match chosen {
-            Some((MenuKind::Speed, i)) => {
-                let rates = [0.5f32, 0.75, 1.0, 1.25, 1.5, 2.0];
-                rates.get(i).map(|r| Command::SetRate(*r))
-            }
+            Some((MenuKind::Speed, i)) => RATES
+                .iter()
+                .rev()
+                .nth(i)
+                .map(|r| Command::SetRate(*r)),
             Some((MenuKind::Quality, i)) => Some(Command::SelectQuality(i)),
             Some((MenuKind::Audio, i)) => Some(Command::SelectAudio(i)),
             Some((MenuKind::Subtitle, i)) => Some(Command::SelectSubtitle(i as i64)),
@@ -1027,7 +1024,7 @@ fn map_btn(btn: Btn) -> Command {
     match btn {
         Btn::PlayPause => Command::TogglePause,
         Btn::Rewind => Command::SeekBy(-10.0),
-        Btn::Forward => Command::SeekBy(10.0),
+        Btn::Forward => Command::SeekBy(30.0),
         Btn::Prev => Command::PrevEpisode,
         Btn::Next => Command::NextEpisode,
         Btn::Volume => Command::MuteToggle,
@@ -1061,9 +1058,6 @@ fn fmt_time(ms: i64) -> String {
     let h = total / 3600;
     let m = (total % 3600) / 60;
     let s = total % 60;
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}")
-    } else {
-        format!("{m:02}:{s:02}")
-    }
+    // 官方时间轴是 `00:25:33 / 01:40:50`，小时位即使是 0 也带前导零
+    format!("{h:02}:{m:02}:{s:02}")
 }
