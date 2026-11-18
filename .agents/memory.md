@@ -1779,3 +1779,43 @@
   `rm -rf build/native-work`，结果是 dpkg-deb 报一堆 `tar: 无法 stat`，
   剩下一个 1.7 KB 的空 deb（我第一次就撞上了，已删）。
   打包前先 `pgrep -af build_native_deb`，有别的实例就等它结束再跑。
+
+### 追加：位置实测第二次（折叠面板里的图标）与结论
+
+- 图标 (1595,1311) → 菜单矩形 x 1595..1840 / y 1236..1420；屏幕底 1440、图标顶 ~1291。
+  即**菜单底边钉在「屏幕底 − 20px」，不是图标顶边**，所以必然盖住 dock、看上去从右下伸出去触底；
+  横向倒是从图标 x 向右展开（这部分是对的）。dock 自己的菜单锚光标、会翻到右上，
+  两条路径锚点算法不一致 → 可复现的 dde-shell 定位缺陷。
+- 自绘方案的前提已判死：DDE 用 Qt 的 dbusmenu 导入把菜单转成自己的 QMenu，
+  右键在 host 侧就被消费，应用侧拿不到 `right-click`（`.agents/memory.md` native.11/12 也实测过）。
+  要自绘只能换触发（单击/双击），与 Windows 版“单击→同步面板、双击→主窗口”冲突。用户决定**先放着不动**。
+- **重要纪律**：`run-native.sh` 每次启动都会重跑 `patch_app.py`。直接改
+  `native/work/app/extracted/background.js` 会破坏补丁幂等判断，导致同一段被重复注入
+  （日志 `tray-linux-menu: patched` 而不是 `already`），托盘行为随即错乱。
+  改托盘逻辑必须改 `native/patches/patch_app.py` 的 `TRAY_PATCHES`（必要时走 `LEGACY` 升级），
+  改完先 `--check` 再重启。本次实验后已用 `/tmp/background.js.orig` 还原，补丁回报 `already`，功能正常。
+
+## 2026-11-18 弹层交互与设置面板
+
+用户反馈：单击展开再单击收不起来、悬浮没高亮、官方「设置」是个很大的弹窗。
+
+- **toggle**：`ui.rs` 里点控制栏按钮时先 `close_menu` 再处理点击，若 `pending`
+  还是同一个 kind 就重新 `open_menu` —— 等于「关掉又立刻打开」，看着像没反应。
+  修法：点之前先记 `bar.menu_kind()`，pending 与它相同就只关不开。
+- **hover**：弹层是独立 override-redirect 窗口，之前只处理 `bar_id` 的
+  MotionNotify。补 `menu_id` 分支 → `ControlBar::on_menu_motion()` 更新
+  `menu_hover` 并重绘；菜单项与设置面板的胶囊都按 `menu_hover` 上底色
+  （官方 `item:hover`），选中项 alpha 0.22、hover 0.12。
+- **设置面板**：`MenuKind::More` 不再是小列表，改成 620×430 的大面板
+  （官方 ConfigPopup 的量级），分组「标签 + 胶囊按钮」：
+  播放速度 6 档 / 循环开-关 / 睡眠定时（关闭·10·15·30·60 分钟）/ 连播策略（灰）/
+  解码方式（灰）/ 解复用（灰）/ 底部一行写明未实现项。
+  命中索引按分组编码：100+ 倍速、200-201 循环、300-304 睡眠。
+  为此新增 `Command::SetLoop(bool)` 和 `Command::SetSleepTimer(u32)`
+  （原来的 CycleSleepTimer 只能循环 关→30→60，面板要能直接选）。
+- 面板高亮/选中用同一套 `MENU_SEL`；灰项不挂命中区，点了没有任何反应。
+- **踩坑**：自测从 52 掉到 33，看着像我改坏了键盘 —— 实际是我手动测全屏时
+  留下的 zspace-player 实例占着窗口和端口，`xdotool key --window` 发给了旧窗口。
+  `kill -9` 清干净再跑就 52/52。以后跑自测前先 `pgrep -x zspace-player` 确认无残留。
+- 待办：面板尺寸 620×430 是按「很大的弹窗」估的，官方真实宽高/两列排布没逆向；
+  画面调节（libvlc 有 `video_set_adjust`，可以做）、字幕样式、快捷键、分享、直播未做。

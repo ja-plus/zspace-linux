@@ -60,8 +60,12 @@ pub enum Command {
     SelectSubtitle(i64),
     PlayEpisode(usize),
     ToggleLoop,
+    /// 直接设定循环播放开关（设置面板用）
+    SetLoop(bool),
     /// 睡眠定时循环：关闭 → 30 分钟 → 60 分钟 → 关闭。
     CycleSleepTimer,
+    /// 直接设定睡眠定时（分钟），0 = 关闭
+    SetSleepTimer(u32),
     /// 结束页「重播」：回到 0 秒重新播。
     Replay,
     ToggleFullscreen,
@@ -1494,6 +1498,10 @@ fn handle_command(cmd: Command, engine: &mut vlc::Engine, st: &mut PlayState, so
             st.looping = !st.looping;
             log(format!("循环播放：{}", if st.looping { "开" } else { "关" }));
         }
+        Command::SetLoop(on) => {
+            st.looping = on;
+            log(format!("循环播放：{}", if on { "开" } else { "关" }));
+        }
         Command::Replay => {
             st.finished = false;
             st.error = None;
@@ -1509,6 +1517,19 @@ fn handle_command(cmd: Command, engine: &mut vlc::Engine, st: &mut PlayState, so
                 Some(30) => Some(60),
                 _ => None,
             };
+            st.sleep_deadline = st
+                .sleep_min
+                .map(|m| Instant::now() + Duration::from_secs(m as u64 * 60));
+            log(format!(
+                "睡眠定时：{}",
+                match st.sleep_min {
+                    Some(m) => format!("{m} 分钟后暂停"),
+                    None => "关闭".to_string(),
+                }
+            ));
+        }
+        Command::SetSleepTimer(min) => {
+            st.sleep_min = if min == 0 { None } else { Some(min) };
             st.sleep_deadline = st
                 .sleep_min
                 .map(|m| Instant::now() + Duration::from_secs(m as u64 * 60));

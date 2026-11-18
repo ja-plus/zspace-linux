@@ -21,10 +21,15 @@ use x11rb::rust_connection::RustConnection;
 
 /// 官方控制栏高度（QSS 里没有，按原实现的 76px 保留）
 pub const BAR_H: u16 = 76;
+/// 倍速档位（官方 6 档，一位小数起步）
+const RATES: [f32; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 const MENU_W: u16 = 220;
 const MENU_ROW: f64 = 36.0;
 /// 弹层标题栏高度（官方 QWidget#widTitle + QLabel 14px 的组合）
 const MENU_HEAD: f64 = 38.0;
+/// 官方 ConfigPopup 是「很大的一个面板」，不是小列表
+const PANEL_W: u16 = 620;
+const PANEL_H: u16 = 430;
 
 /// Everything the bar needs to draw itself; rebuilt by the player loop.
 #[derive(Default, Clone, PartialEq)]
@@ -117,6 +122,8 @@ pub struct ControlBar {
     icons: IconSet,
     /// 当前鼠标悬停的按钮，用来切 hover 态图标
     hover: Option<Btn>,
+    /// 弹层里鼠标悬停的行号（官方 item:hover）
+    menu_hover: Option<usize>,
 }
 
 /// 官方控制栏高度（QSS 里没有，按原实现的 76px 保留）
@@ -190,6 +197,7 @@ impl ControlBar {
             pending_menu: None,
             icons: IconSet::load(),
             hover: None,
+            menu_hover: None,
         })
     }
 
@@ -215,7 +223,32 @@ impl ControlBar {
         self.menu.is_some()
     }
 
+    /// 当前打开的弹层类型；没开时是 None。
+    pub fn menu_kind(&self) -> Option<MenuKind> {
+        self.menu.as_ref().map(|m| m.kind)
+    }
+
+    /// 弹层窗口里的鼠标移动：更新 hover 行并重绘。
+    pub fn on_menu_motion(&mut self, conn: &RustConnection, x: i16, y: i16) {
+        if self.menu.is_none() {
+            return;
+        }
+        let mut hovered = None;
+        for h in &self.menu_hits {
+            let (hx, hy, hw, hh) = h.rect;
+            if h.btn == Btn::MenuItem && x >= hx && x <= hx + hw && y >= hy && y <= hy + hh {
+                hovered = Some(h.index);
+                break;
+            }
+        }
+        if hovered != self.menu_hover {
+            self.menu_hover = hovered;
+            self.draw_menu(conn);
+        }
+    }
+
     pub fn close_menu(&mut self, conn: &RustConnection) {
+        self.menu_hover = None;
         if self.menu.take().is_some() {
             let _ = conn.unmap_window(self.menu_win);
             let _ = conn.flush();
@@ -556,19 +589,25 @@ impl ControlBar {
         if items.is_empty() {
             return;
         }
-        let h = (MENU_HEAD + items.len() as f64 * MENU_ROW + 8.0) as u16;
-        let x = (self.abs_x + self.anchor_x - MENU_W as i16 / 2)
-            .clamp(self.abs_x, self.abs_x + self.width as i16 - MENU_W as i16);
+        let (mw, h) = if kind == MenuKind::More {
+            (PANEL_W, PANEL_H)
+        } else {
+            (MENU_W, (MENU_HEAD + items.len() as f64 * MENU_ROW + 8.0) as u16)
+        };
+        let _ = &items;
+        let x = (self.abs_x + self.anchor_x - mw as i16 / 2)
+            .clamp(self.abs_x, self.abs_x + self.width as i16 - mw as i16);
         let y = self.abs_y - h as i16 - 6;
         let _ = conn.configure_window(
             self.menu_win,
             &x11rb::protocol::xproto::ConfigureWindowAux::new()
                 .x(x as i32)
                 .y(y as i32)
-                .width(MENU_W as u32)
+                .width(mw as u32)
                 .height(h as u32),
         );
-        self.menu = Some(MenuState { kind, items, w: MENU_W, h });
+        self.menu_hover = None;
+        self.menu = Some(MenuState { kind, items, w: mw, h });
         let _ = conn.map_window(self.menu_win);
         let _ = conn.configure_window(
             self.menu_win,
@@ -632,17 +671,27 @@ impl ControlBar {
                 index: 0,
             });
 
+            if kind == MenuKind::More {
+                let snap = self.last.clone().unwrap_or_default();
+                self.draw_config(&ctx, &snap, mw);
+            } else {
             let items = self.menu.as_ref().map(|m| m.items.clone()).unwrap_or_default();
             for (i, (label, selected)) in items.iter().enumerate() {
                 let ty = MENU_HEAD + 4.0 + i as f64 * MENU_ROW;
-                if *selected {
-                    // 官方弹层项选中态：rgba(130,149,255,0.12) + border-radius 4
+                let hovered = self.menu_hover == Some(i);
+                if *selected || hovered {
+                    // 官方：item:hover 与 selected 都上底色，选中更实一点
+                    let alpha = if *selected { 0.22 } else { MENU_SEL.3 };
                     ctx.new_path();
                     style::rounded_rect(&ctx, 5.0, ty, mw as f64 - 10.0, MENU_ROW - 4.0, 4.0);
-                    ctx.set_source_rgba(MENU_SEL.0, MENU_SEL.1, MENU_SEL.2, MENU_SEL.3);
+                    ctx.set_source_rgba(MENU_SEL.0, MENU_SEL.1, MENU_SEL.2, alpha);
                     let _ = ctx.fill();
                 }
-                let color = if *selected { (1.0, 1.0, 1.0, 1.0) } else { FG };
+                let color = if *selected || hovered {
+                    (1.0, 1.0, 1.0, 1.0)
+                } else {
+                    FG
+                };
                 let mut t = label.clone();
                 while self.text_width(&ctx, &t, FONT) > mw as f64 - 36.0 && t.chars().count() > 3 {
                     let cut = t.char_indices().nth(t.chars().count().saturating_sub(2)).map(|(c, _)| c).unwrap_or(0);
@@ -657,12 +706,149 @@ impl ControlBar {
                     index: i,
                 });
             }
+            }
         }
         let (w, h) = match self.menu.as_ref() {
             Some(m) => (m.w, m.h),
             None => return,
         };
         self.blit(conn, &mut surface, self.menu_win, w, h);
+    }
+
+    /// 官方 ConfigPopup：一个很大的设置面板，按「分组标签 + 胶囊按钮」排。
+    /// 没实现的项画灰、不挂命中区（点了不会有反应，也不会误导）。
+    fn draw_config(&mut self, ctx: &Context, snap: &Snapshot, mw: i32) {
+        let x0 = 20.0;
+        let mut y = MENU_HEAD + 30.0;
+
+        let chips: Vec<(String, bool)> = RATES
+            .iter()
+            .map(|r| (fmt_rate(*r), (snap.rate - r).abs() < 0.01))
+            .collect();
+        self.chip_row(ctx, x0, y, "播放速度", &chips, 100, true);
+        y += 46.0;
+
+        let chips = vec![
+            ("开".to_string(), snap.looping),
+            ("关".to_string(), !snap.looping),
+        ];
+        self.chip_row(ctx, x0, y, "循环播放", &chips, 200, true);
+        y += 46.0;
+
+        let chips: Vec<(String, bool)> = [0u32, 10, 15, 30, 60]
+            .iter()
+            .map(|m| {
+                let label = if *m == 0 {
+                    "关闭".to_string()
+                } else {
+                    format!("{m} 分钟")
+                };
+                let on = if *m == 0 {
+                    snap.sleep_min.is_none()
+                } else {
+                    snap.sleep_min == Some(*m)
+                };
+                (label, on)
+            })
+            .collect();
+        self.chip_row(ctx, x0, y, "睡眠定时", &chips, 300, true);
+        y += 52.0;
+        self.config_divider(ctx, mw, y - 20.0);
+
+        // 以下两组属于功能缺口：连播策略依赖 12/1 的列表策略，解码/解复用
+        // 在 libvlc 3 里没有运行时切换接口
+        let chips = vec![
+            ("顺序播放".to_string(), !snap.looping),
+            ("单集循环".to_string(), snap.looping),
+            ("随机播放".to_string(), false),
+        ];
+        self.chip_row(ctx, x0, y + 12.0, "连播策略", &chips, 400, false);
+        y += 58.0;
+
+        let chips = vec![
+            ("硬解".to_string(), false),
+            ("软解".to_string(), true),
+        ];
+        self.chip_row(ctx, x0, y, "解码方式", &chips, 500, false);
+        y += 46.0;
+
+        let chips = vec![
+            ("AVCodec".to_string(), true),
+            ("VLC".to_string(), false),
+        ];
+        self.chip_row(ctx, x0, y, "解复用", &chips, 600, false);
+        y += 52.0;
+        self.config_divider(ctx, mw, y - 20.0);
+
+        self.text_a(
+            ctx,
+            "画面调节（亮度/对比度/饱和度）、字幕样式、快捷键、分享、直播：暂未实现",
+            x0,
+            y + 14.0,
+            FONT_LABEL,
+            (1.0, 1.0, 1.0, 0.35),
+        );
+    }
+
+    /// 面板里的一行：左侧标签 + 右侧一排胶囊。
+    fn chip_row(
+        &mut self,
+        ctx: &Context,
+        x0: f64,
+        y: f64,
+        label: &str,
+        chips: &[(String, bool)],
+        base: usize,
+        enabled: bool,
+    ) {
+        let lab = if enabled {
+            style::LABEL
+        } else {
+            (1.0, 1.0, 1.0, 0.28)
+        };
+        self.text_a(ctx, label, x0, y + 5.0, FONT_LABEL, lab);
+        let mut x = x0 + 96.0;
+        for (i, (text, selected)) in chips.iter().enumerate() {
+            let tw = self.text_width(ctx, text, FONT_SMALL);
+            let bw = tw + 24.0;
+            let bh = 30.0;
+            let hovered = enabled && self.menu_hover == Some(base + i);
+            if *selected || hovered {
+                ctx.new_path();
+                style::rounded_rect(ctx, x, y - bh / 2.0 + 5.0, bw, bh, 8.0);
+                // 官方 btnSpeed 口径：灰底胶囊；选中/悬停用主色淡底
+                let alpha = if *selected { 0.18 } else { MENU_SEL.3 };
+                ctx.set_source_rgba(MENU_SEL.0, MENU_SEL.1, MENU_SEL.2, alpha);
+                let _ = ctx.fill();
+            }
+            let color = if !enabled {
+                (1.0, 1.0, 1.0, 0.3)
+            } else if *selected || hovered {
+                (1.0, 1.0, 1.0, 1.0)
+            } else {
+                FG
+            };
+            self.text_a(ctx, text, x + 12.0, y + 5.0, FONT_SMALL, color);
+            if enabled {
+                self.menu_hits.push(Hit {
+                    rect: (x as i16, (y - 10.0) as i16, bw as i16, 30),
+                    btn: Btn::MenuItem,
+                    index: base + i,
+                });
+            }
+            x += bw + 8.0;
+        }
+    }
+
+    fn config_divider(&self, ctx: &Context, mw: i32, y: f64) {
+        ctx.set_source_rgba(
+            style::DIVIDER.0,
+            style::DIVIDER.1,
+            style::DIVIDER.2,
+            style::DIVIDER.3,
+        );
+        ctx.rectangle(20.0, y, mw as f64 - 40.0, 1.0);
+        let _ = ctx.fill();
     }
 
     /// Click inside the popup menu: returns the command and closes the menu.
@@ -681,6 +867,17 @@ impl ControlBar {
             }
         }
         self.menu = None;
+        // 设置面板：索引按分组编码（100+ 倍速、200 循环、300+ 睡眠）
+        if let Some((MenuKind::More, idx)) = chosen {
+            return match idx {
+                100..=105 => RATES.get(idx - 100).map(|r| Command::SetRate(*r)),
+                200 => Some(Command::SetLoop(true)),
+                201 => Some(Command::SetLoop(false)),
+                300 => Some(Command::SetSleepTimer(0)),
+                301..=304 => Some(Command::SetSleepTimer([0u32, 10, 15, 30, 60][idx - 300])),
+                _ => None,
+            };
+        }
         match chosen {
             Some((MenuKind::Speed, i)) => {
                 let rates = [0.5f32, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -690,8 +887,6 @@ impl ControlBar {
             Some((MenuKind::Audio, i)) => Some(Command::SelectAudio(i)),
             Some((MenuKind::Subtitle, i)) => Some(Command::SelectSubtitle(i as i64)),
             Some((MenuKind::Episode, i)) => Some(Command::PlayEpisode(i)),
-            Some((MenuKind::More, 0)) => Some(Command::ToggleLoop),
-            Some((MenuKind::More, 1)) => Some(Command::CycleSleepTimer),
             _ => None,
         }
     }
@@ -827,7 +1022,7 @@ fn menu_title(kind: MenuKind) -> &'static str {
         MenuKind::Audio => "音轨",
         MenuKind::Subtitle => "字幕",
         MenuKind::Episode => "选集",
-        MenuKind::More => "更多设置",
+        MenuKind::More => "播放设置",
     }
 }
 

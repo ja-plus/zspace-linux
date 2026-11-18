@@ -470,6 +470,10 @@ impl AppWindow {
                                 let _ = tx.send(Event::Command(cmd));
                             }
                         }
+                    } else if Some(e.event) == menu_id {
+                        if let Some(bar) = self.bar.as_mut() {
+                            bar.on_menu_motion(&self.conn, e.event_x, e.event_y);
+                        }
                     }
                 }
                 XEvent::EnterNotify(_) => self.last_activity = Instant::now(),
@@ -491,11 +495,16 @@ impl AppWindow {
                         }
                     } else if Some(e.event) == bar_id {
                         if let Some(mut bar) = self.bar.take() {
+                            // 记住点之前开着哪个弹层：同一个按钮再点一次应当收起，
+                            // 不能「关掉再立刻打开」（那就是点了没反应）
+                            let was_open = bar.menu_kind();
                             bar.close_menu(&self.conn);
                             let cmd = bar.on_button(e.event_x, e.event_y, snap);
                             let pending = bar.take_pending_menu();
                             if let Some(kind) = pending {
-                                bar.open_menu(&self.conn, kind, snap);
+                                if was_open != Some(kind) {
+                                    bar.open_menu(&self.conn, kind, snap);
+                                }
                             }
                             self.bar = Some(bar);
                             if let Some(cmd) = cmd {
