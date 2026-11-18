@@ -236,8 +236,12 @@ impl ControlBar {
         let mut hovered = None;
         for h in &self.menu_hits {
             let (hx, hy, hw, hh) = h.rect;
-            if h.btn == Btn::MenuItem && x >= hx && x <= hx + hw && y >= hy && y <= hy + hh {
-                hovered = Some(h.index);
+            if x >= hx && x <= hx + hw && y >= hy && y <= hy + hh {
+                hovered = Some(if h.btn == Btn::MenuClose {
+                    usize::MAX
+                } else {
+                    h.index
+                });
                 break;
             }
         }
@@ -662,9 +666,27 @@ impl ControlBar {
             );
             ctx.rectangle(1.0, MENU_HEAD, mw as f64 - 2.0, 1.0);
             let _ = ctx.fill();
-            // 官方 popup 标题栏右侧有关闭叉（QPushButton#btnClose → popupClose2x.png）
-            self.icons
-                .draw_center(&ctx, "popup_close", mw as f64 - 20.0, MENU_HEAD / 2.0, 20.0);
+            // 关闭叉：手绘两根线。
+            // 官方资源里没有干净的 20px 叉 —— titlebar/winClose2x.png 是 104x88
+            // 的按钮整图，缩到 20px 叉的笔画就没了；popup/popupClose2x 又因为那一段
+            // 映射串位、提取出来是下箭头。这里直接画，颜色和粗细都可控。
+            let close_hover = self.menu_hover == Some(usize::MAX);
+            let cx = mw as f64 - 20.0;
+            let cy = MENU_HEAD / 2.0;
+            if close_hover {
+                ctx.new_path();
+                let _ = ctx.arc(cx, cy, 12.0, 0.0, std::f64::consts::TAU);
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+                let _ = ctx.fill();
+            }
+            ctx.new_path();
+            ctx.set_line_width(1.6);
+            ctx.set_source_rgba(1.0, 1.0, 1.0, if close_hover { 1.0 } else { 0.78 });
+            ctx.move_to(cx - 6.0, cy - 6.0);
+            ctx.line_to(cx + 6.0, cy + 6.0);
+            ctx.move_to(cx + 6.0, cy - 6.0);
+            ctx.line_to(cx - 6.0, cy + 6.0);
+            let _ = ctx.stroke();
             self.menu_hits.push(Hit {
                 rect: ((mw - 32) as i16, 4, 28, (MENU_HEAD - 8.0) as i16),
                 btn: Btn::MenuClose,

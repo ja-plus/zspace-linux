@@ -198,7 +198,7 @@ seek / 切音轨 / 切字幕都先等服务端回复；超过 8 s 未回复或�
 | 倍速 | 文字胶囊：底色 `rgba(255,255,255,0.15)`、圆角 8、16px、左右 padding 8 | `QPushButton#btnSpeed` |
 | 清晰度 | 纯文字按钮 16px，左右 padding 8 | `QPushButton#btnFormat` |
 | 弹层容器 | `rgba(0,0,0,0.85)` + 圆角 8 + 1px `rgba(179,193,205,0.15)` 描边 | `QWidget#widLiveBase` |
-| 弹层标题栏 | 14px `rgba(255,255,255,0.55)`，底边 1px `rgba(255,255,255,0.15)`，右侧关闭叉 | `QWidget#widTitle` + `QLabel` + `btnClose` |
+| 弹层标题栏 | 14px `rgba(255,255,255,0.55)`，底边 1px `rgba(255,255,255,0.15)`，右侧关闭叉（手绘 1.6px 白线，hover 加圆底） | `QWidget#widTitle` + `QLabel` + `btnClose` |
 | 弹层项 | 16px，选中 `rgba(130,149,255,0.12)`、圆角 4 | 弹层 `QPushButton` 规则 |
 | 按钮组分隔线 | 1px `rgba(255,255,255,0.15)` | `QWidget#widButtons { border-right }` |
 
@@ -216,6 +216,9 @@ normal / Hover / Disable 三态齐全，鼠标悬停会切到 Hover 图
 
 - 弹层的**窗口形状**：圆角是画在图片内侧的，X11 override-redirect 窗口本身
   还是矩形（没有 ARGB visual），所以四角外侧能看到一点底色。
+- 弹层的关闭叉是**手绘**的，不是官方图标：资源里 `titlebar/winClose2x.png` 是
+  104×88 的按钮整图（缩到 20px 笔画就没了），`popup/popupClose2x.png` 又因为
+  那一段映射串位、提取出来是下箭头。手绘的好处是粗细/颜色/hover 都可控。
 - 按钮的精确 x 坐标与间距：官方由 Qt layout 计算，QSS 里没有，
   这里按 40px 图标位 + 2px 间距排。
 - `popup/` 目录那一段图标的「数据块 ↔ 文件名」映射还没校准
