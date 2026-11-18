@@ -224,6 +224,13 @@ TRAY_PATCHES = [
     # 3) 仍然显式带 window:Eo + x/y：不带 window 时 Electron 用「当前聚焦窗口」，
     #    笔记窗在非激活态下可能没有焦点，菜单不弹或弹到别的窗口；不带 x/y 会落到
     #    屏幕左上角。
+    # 4) 坐标**不要往窗口里夹**（native.18 修）。笔记窗收起时只有 110x48，原来的
+    #    `Math.min(x, b.width-180)` 直接把 mx 压成 0，菜单就贴在窗口左下角、看着像
+    #    「在光标正下方居中」。GTK 菜单是 override-redirect 的独立窗口，不会被子窗口
+    #    裁掉，所以这里按屏幕坐标算：左上角落在光标右下 (+2,+2)，只在贴屏幕边缘时回退。
+    # 5) 菜单是 GTK 独立窗口，会拿走焦点；官方页面在失焦/点外面之后会自己发
+    #    collapse（收起成图标条）。右键只该弹菜单，不该改窗口状态 → 弹之前记下
+    #    So.collapse，关掉后 3 秒内盯一眼，被改了就还原。
     ("memo-rightclick-popup",
      '"rightclick"==e?(No=null,Ao.popup({window:Eo}))',
      '"rightclick"==e?(No=null,(()=>{try{'
@@ -239,12 +246,21 @@ TRAY_PATCHES = [
      'setTimeout(()=>{try{'
      'if(!Eo)return;'
      'let b=Eo.getContentBounds(),p=i.screen.getCursorScreenPoint(),'
-     'mx=Math.max(0,Math.min(p.x-b.x,b.width-180)),'
-     'my=Math.max(0,Math.min(p.y-b.y,b.height-16)),'
-     't0=Date.now();'
+     'wa=i.screen.getDisplayNearestPoint(p).workArea,'
+     'sx=Math.min(p.x+2,wa.x+wa.width-200),sy=Math.min(p.y+2,wa.y+wa.height-150),'
+     'mx=sx-b.x,my=sy-b.y,t0=Date.now(),cs=!!So.collapse;'
+     'global.__memoMenuOpen=!0;'
      'Ao.popup({window:Eo,x:mx,y:my,callback:()=>{'
-     'r.a.info("[memo] menu closed after "+(Date.now()-t0)+"ms")}}),'
-     'r.a.info("[memo] menu popped at "+mx+","+my+" win="+b.width+"x"+b.height)'
+     'global.__memoMenuOpen=!1,global.__memoMenuAt=Date.now();'
+     'r.a.info("[memo] menu closed after "+(Date.now()-t0)+"ms");'
+     # 5 s 内每 300 ms 看一眼：折叠态被动了就还原（点菜单项关窗/隐藏时不动）
+     '(()=>{let n=0,iv=setInterval(()=>{'
+     'if(!Eo||Eo.isDestroyed()||!So.show||++n>17){clearInterval(iv);return}'
+     'if(!!So.collapse!==cs){clearInterval(iv),'
+     'r.a.info("[memo] revert collapse="+cs+" (page collapsed after menu)"),'
+     'cs?Po():Lo()}},300)})()'
+     '}}),'
+     'r.a.info("[memo] menu popped at "+sx+","+sy+" win="+b.width+"x"+b.height)'
      '}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}},120)'
      '}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}})())'),
     # 页面是 NAS 上的 /home/notebookMemo，右键是否发 "rightclick" 由服务端页面决定；
@@ -263,12 +279,14 @@ TRAY_PATCHES = [
      'Eo.webContents.on("context-menu",()=>{'
      'r.a.info("[memo] webContents context-menu"),ko("rightclick")}),Io()}'),
     # 页面的 mouseup 会在右键菜单弹出前后自己发 collapse/expand，
-    # 结果"右键 = 左键折叠/展开"。右键后 800 ms 内的折叠/展开直接丢弃。
+    # 结果"右键 = 左键折叠/展开"。菜单开着时一律丢弃，菜单关掉后 1.2 s 内也丢弃
+    # （页面会在失焦后隔一两秒才补发 collapse，800 ms 的窗口挡不住）。
     ("memo-suppress-toggle",
      'ko=e=>(r.a.info("Handle desktop note action:"+e),"hide"==e?',
      'ko=e=>(r.a.info("Handle desktop note action:"+e),'
-     '("collapse"==e||"expand"==e)&&Date.now()-(global.__memoMenuAt||0)<800'
-     '?(console.log("[memo] drop page toggle after right-click: "+e),!0)'
+     '("collapse"==e||"expand"==e)&&'
+     '(global.__memoMenuOpen||Date.now()-(global.__memoMenuAt||0)<1200)'
+     '?(r.a.info("[memo] drop page toggle after right-click: "+e),!0)'
      ':"hide"==e?'),
     # 同一个问题还有一处：登录提示弹窗（showPopUpIfNeeded）也用 getBounds()。
     # 一起改成 Linux 用光标锚定。
@@ -357,6 +375,20 @@ LEGACY = {
         'TRAY_NEW',
     )],
     'memo-rightclick-popup': [(
+        # native.17 线上文本：坐标往窗口里夹（小窗时菜单贴到左下角）+ 不还原折叠态
+        '"rightclick"==e?(No=null,(()=>{try{if(!Eo){r.a.info("[memo] no memo window");return}'
+        'if(Date.now()-(global.__memoMenuAt||0)<400){r.a.info("[memo] skip duplicate right-click");return}'
+        'global.__memoMenuAt=Date.now();setTimeout(()=>{try{if(!Eo)return;'
+        'let b=Eo.getContentBounds(),p=i.screen.getCursorScreenPoint(),'
+        'mx=Math.max(0,Math.min(p.x-b.x,b.width-180)),'
+        'my=Math.max(0,Math.min(p.y-b.y,b.height-16)),t0=Date.now();'
+        'Ao.popup({window:Eo,x:mx,y:my,callback:()=>{'
+        'r.a.info("[memo] menu closed after "+(Date.now()-t0)+"ms")}}),'
+        'r.a.info("[memo] menu popped at "+mx+","+my+" win="+b.width+"x"+b.height)'
+        '}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}},120)'
+        '}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}})())',
+        'MEMO_NEW',
+    ), (
         # native.14 / native.15 线上文本：popup 期间关置顶 + 用 console.log
         '"rightclick"==e?(No=null,(()=>{try{if(!Eo){console.log("[memo] no memo window");return}'
         'if(Date.now()-(global.__memoMenuAt||0)<400){console.log("[memo] skip duplicate right-click");return}'
@@ -406,6 +438,14 @@ LEGACY = {
         'console.log("[memo] webContents context-menu"),ko("rightclick")}),Io()}',
         'CTX_NEW',
     )],
+    'memo-suppress-toggle': [(
+        # native.14~17：800 ms 窗口 + console.log，且不认「菜单开着」这个状态
+        'ko=e=>(r.a.info("Handle desktop note action:"+e),'
+        '("collapse"==e||"expand"==e)&&Date.now()-(global.__memoMenuAt||0)<800'
+        '?(console.log("[memo] drop page toggle after right-click: "+e),!0)'
+        ':"hide"==e?',
+        'SUP_NEW',
+    )],
     'tray-popup-pos': [(
         'getTrayPopupPosition(){let e=this.tray.getBounds();'
         '"linux"==process.platform&&(!e||0==e.width&&0==e.height)&&(()=>{'
@@ -445,7 +485,7 @@ def apply_patches(tag, patches):
     results = []
     for name, old, new in patches:
         for lo, ln in LEGACY.get(name, []):
-            if ln in ('TRAY_NEW', 'MEMO_NEW', 'POPUP_NEW', 'CTX_NEW'):
+            if ln in ('TRAY_NEW', 'MEMO_NEW', 'POPUP_NEW', 'CTX_NEW', 'SUP_NEW'):
                 ln = new
             if lo in src and lo != ln:
                 src = src.replace(lo, ln, 1)
