@@ -729,7 +729,7 @@ fn snapshot_of(engine: &vlc::Engine, st: &PlayState) -> Snapshot {
             (label, st.audio_ordinal == Some(i))
         })
         .collect();
-    let mut subtitles: Vec<(String, bool)> = vec![("关闭字幕".to_string(), st.sub_ordinal.is_none() && st.nas_sub_index.is_none())];
+    let mut subtitles: Vec<(String, bool)> = vec![("不显示字幕".to_string(), st.sub_ordinal.is_none() && st.nas_sub_index.is_none())];
     for (i, sub) in st.subtitle_list.iter().enumerate() {
         let name = ["label", "name", "title", "language"]
             .iter()

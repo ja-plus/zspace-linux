@@ -15,7 +15,7 @@
 //! - `QWidget#widButtons { border-right: 1px solid rgba(255,255,255,0.15); }`
 //! - 弹层项 hover：`background: rgba(130,149,255,0.12); border-radius: 4px; font-size: 16px;`
 
-use cairo::{Context, ImageSurface, LinearGradient};
+use cairo::{Context, ImageSurface};
 use std::collections::HashMap;
 use std::io::Cursor;
 
@@ -34,6 +34,10 @@ pub const FONT: f64 = 16.0;
 pub const FONT_SMALL: f64 = 14.0;
 /// 说明性文字（官方 `QLabel { color: rgba(255,255,255,0.55); font-size: 14px; }`）
 pub const LABEL: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.55);
+/// 面板里更亮一档的标签（标题、页签名）
+pub const LABEL_HI: (f64, f64, f64, f64) = (0.91, 0.91, 0.91, 1.0);
+/// 弹层副标题灰（实测 (190,191,192)）
+pub const SUB_FG: (f64, f64, f64, f64) = (0.72, 0.72, 0.74, 1.0);
 pub const FONT_LABEL: f64 = 14.0;
 /// 弹层项 hover/选中的底色 rgba(130,149,255,0.12)
 pub const MENU_SEL: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
@@ -52,7 +56,9 @@ pub const POPUP_RADIUS: f64 = 8.0;
 pub const POPUP_BORDER: (f64, f64, f64, f64) = (179.0 / 255.0, 193.0 / 255.0, 205.0 / 255.0, 0.15);
 
 /// 控制栏图标尺寸：资源是 80x80 的 2x 图，官方界面上量到约 24px。
-pub const ICON_SIZE: f64 = 28.0;
+/// 控制栏图标绘制尺寸：资源是 80x80 的 @2x 图，按逻辑尺寸 40 绘制，
+/// 实际墨迹 ≈18-22px，与 Windows 版实测一致（28 会偏小、只剩 12-16px）。
+pub const ICON_SIZE: f64 = 40.0;
 
 macro_rules! icons {
     ($(($key:literal, $path:literal)),* $(,)?) => {
@@ -190,21 +196,10 @@ pub fn draw_seek(
 /// （0% 透明 → 55% 黑 0.6 → 100% 黑 0.75）。窗口没有 ARGB，
 /// 所以把「渐变叠底色」的合成结果直接算成三段实色。
 pub fn draw_control_bg(ctx: &Context, w: f64, h: f64) {
-    let mix = |a: f64| {
-        (
-            CONTROL_BASE.0 * (1.0 - a),
-            CONTROL_BASE.1 * (1.0 - a),
-            CONTROL_BASE.2 * (1.0 - a),
-        )
-    };
-    let canvas = h.max(1.0);
-    let g = LinearGradient::new(0.0, 0.0, 0.0, canvas);
-    let (t, m, b) = (mix(0.0), mix(0.6), mix(0.75));
-    g.add_color_stop_rgb(0.0, t.0, t.1, t.2);
-    g.add_color_stop_rgb(0.55, m.0, m.1, m.2);
-    g.add_color_stop_rgb(1.0, b.0, b.1, b.2);
-    let _ = ctx.set_source(&g);
-    ctx.rectangle(0.0, 0.0, w, canvas);
+    // Windows 版实测：控制栏是一块**纯色** #141620，没有渐变
+    // （逐像素取值为 (20,22,32)，从栏顶到栏底完全一致）。
+    ctx.set_source_rgb(CONTROL_BASE.0, CONTROL_BASE.1, CONTROL_BASE.2);
+    ctx.rectangle(0.0, 0.0, w, h.max(1.0));
     let _ = ctx.fill();
 }
 

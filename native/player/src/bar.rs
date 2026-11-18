@@ -8,9 +8,7 @@
 //! play/pause · -10s · +10s · prev · next · time | seek | rate · subtitle ·
 //! audio · quality · episodes · volume+slider · fullscreen · close.
 
-use crate::style::{
-    self, IconSet, ACCENT, FG, FG_DIM, FONT, FONT_LABEL, FONT_SMALL, ICON_SIZE, MENU_SEL,
-};
+use crate::style::{self, IconSet, ACCENT, FG, FONT_SMALL, ICON_SIZE};
 use crate::{Command, MenuKind};
 use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
 use x11rb::connection::Connection;
@@ -19,19 +17,75 @@ use x11rb::protocol::xproto::{
 };
 use x11rb::rust_connection::RustConnection;
 
-/// 控制栏高度：按 Windows 版实测（视频底部到窗口底约 96px）
-pub const BAR_H: u16 = 96;
+/// 控制栏高度：Windows 版实测 66px（标题栏 44 + 视频 718 + 控制栏 66 = 828）
+pub const BAR_H: u16 = 66;
 /// 按钮位宽度：官方图标中心间距实测 56px
 const BTN_SLOT: f64 = 56.0;
 /// 倍速档位（官方 6 档，一位小数起步）
 const RATES: [f32; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-const MENU_W: u16 = 258;
-const MENU_ROW: f64 = 48.0;
-/// 弹层标题栏高度（官方 QWidget#widTitle + QLabel 14px 的组合）
-const MENU_HEAD: f64 = 38.0;
-/// 官方 ConfigPopup 是「很大的一个面板」，不是小列表
-const PANEL_W: u16 = 620;
-const PANEL_H: u16 = 430;
+/// 小弹层窗口：Windows 版实测固定 320x360（与内容多少无关）
+const POPUP_W: u16 = 320;
+const POPUP_H: u16 = 360;
+/// 单行项 / 双行项的实测行高
+const ROW_1: f64 = 46.0;
+const ROW_2: f64 = 74.0;
+const POPUP_PAD: f64 = 8.0;
+/// 单选圆圈中心 x、文字左边 x
+const RADIO_X: f64 = 20.0;
+const TEXT_X: f64 = 53.0;
+/// 弹层/面板标题栏高度（实测：标题中心 y≈28，分隔线 y=56）
+const HEAD_H: f64 = 56.0;
+/// 设置面板实测 720x490（含 1px 边框），左栏 178，项高 45
+const PANEL_W: u16 = 720;
+const PANEL_H: u16 = 490;
+const SIDE_W: f64 = 178.0;
+const ITEM_H: f64 = 45.0;
+const CONTENT_PAD: f64 = 26.0;
+/// 中文正文字号（实测原画两字宽 30 → 15px）
+const FONT_CN: f64 = 15.0;
+/// 副文案字号
+const FONT_SUB: f64 = 13.0;
+
+const GROUPS: [&str; 9] = [
+    "声道",
+    "HDR/杜比",
+    "图像",
+    "解码",
+    "解封装",
+    "个性化",
+    "快捷键",
+    "循环播放",
+    "定时播放",
+];
+const AUDIO_CH: [&str; 6] = ["自动", "立体声", "双声道", "4.0", "5.1", "7.1"];
+const HDR_OPTS: &[(&str, &str)] = &[
+    ("兼容模式", "未开启的视频文件模式最多，兼容性较好，适合大多数场景下使用"),
+    ("HDR模式", "优化硬件HDR和杜比视界视频的亮度和色彩效果，但低性能电脑会出现黑屏、卡顿"),
+    ("杜比模式", "如果想体验杜比视界视频以及HDR高亮度视频，请选用这种模式播放"),
+];
+const DECODE_OPTS: &[(&str, &str)] = &[
+    ("硬解码", "利用电脑自身的硬件来进行解码。优点是效率高、功耗低，适合大部分视频文件"),
+    ("软解码", "通过软件进行解码。优点是支持的视频格式多，对画质和音效的支持更好，但CPU占用较高"),
+];
+const DEMUX_OPTS: &[(&str, &str)] = &[
+    ("默认解封装", "默认解封装方式支持格式相对较多、也相对稳定，适合大多数视频文件"),
+    ("原生解封装", "系统自带解封装器，不支持大部分视频编码格式，无法切换音轨与字幕"),
+];
+const LOOP_OPTS: &[(&str, &str)] = &[
+    ("顺序播放", "按剧集列表依次播放，播完停止"),
+    ("单视频循环", "当前视频循环播放"),
+    ("全部循环", "按剧集列表循环播放"),
+    ("随机循环", "随机顺序播放列表中的视频"),
+];
+const SHORTCUTS: &[(&str, &str)] = &[
+    ("关闭播放窗口", "Ctrl + X"),
+    ("静音键", "Ctrl + M"),
+    ("全屏 / 退出全屏", "Ctrl + Enter"),
+    ("暂停 / 续播", "Space"),
+    ("字幕加快 / 延迟0.5秒", "Shift + / Shift -"),
+    ("老板键（隐藏窗口）", "Alt + D"),
+    ("上一集 / 下一集", "PageUp / PageDown"),
+];
 
 /// Everything the bar needs to draw itself; rebuilt by the player loop.
 #[derive(Default, Clone, PartialEq)]
@@ -89,6 +143,14 @@ enum Btn {
     /// 弹层标题栏右侧的关闭叉
     MenuClose,
     MenuItem,
+    /// 设置面板左栏分组
+    MenuGroup,
+    /// 设置面板右栏行
+    MenuRow,
+    /// 字幕弹层头部的三个按钮
+    SubSearch,
+    SubAdd,
+    SubAdjust,
 }
 
 struct Hit {
@@ -97,9 +159,38 @@ struct Hit {
     index: usize,
 }
 
+/// 弹层里的一项。`sub` 有值时是双行（行高 74），否则单行（46）。
+#[derive(Clone)]
+struct MenuItem {
+    label: String,
+    sub: Option<String>,
+    selected: bool,
+}
+
+fn row_h(it: &MenuItem) -> f64 {
+    if it.sub.is_some() {
+        ROW_2
+    } else {
+        ROW_1
+    }
+}
+
+/// 把 "主标题 - 副标题" / "主标题 · 副标题" 拆成两行（官方的双行弹层项）。
+fn split_label(raw: &str) -> (String, Option<String>) {
+    for sep in [" - ", " · "] {
+        if let Some((a, b)) = raw.split_once(sep) {
+            let sub = b.trim().trim_matches(|c| c == '[' || c == ']').to_string();
+            if !a.trim().is_empty() && !sub.is_empty() {
+                return (a.trim().to_string(), Some(sub));
+            }
+        }
+    }
+    (raw.to_string(), None)
+}
+
 struct MenuState {
     kind: MenuKind,
-    items: Vec<(String, bool)>,
+    items: Vec<MenuItem>,
     w: u16,
     h: u16,
 }
@@ -127,6 +218,12 @@ pub struct ControlBar {
     hover: Option<Btn>,
     /// 弹层里鼠标悬停的行号（官方 item:hover）
     menu_hover: Option<usize>,
+    /// 设置面板当前分组（0..8）
+    page: usize,
+    /// 各分组里选中的行（声道页用 sel[0]，HDR 页用 sel[1]）
+    sel: [usize; 9],
+    /// 播放窗口高度（设置面板要在这个窗口里居中）
+    pub window_height: u16,
 }
 
 /// 官方控制栏高度（QSS 里没有，按原实现的 76px 保留）
@@ -169,7 +266,7 @@ impl ControlBar {
             conn.setup().roots[0].root,
             x,
             y,
-            MENU_W,
+            POPUP_W,
             40,
             0,
             WindowClass::INPUT_OUTPUT,
@@ -201,6 +298,9 @@ impl ControlBar {
             icons: IconSet::load(),
             hover: None,
             menu_hover: None,
+            page: 0,
+            sel: [0; 9],
+            window_height: 0,
         })
     }
 
@@ -359,19 +459,41 @@ impl ControlBar {
     }
 
     fn draw_seek(&mut self, ctx: &Context, snap: &Snapshot, w: i32) {
-        // Windows 版实测：左右边距 20px，线在控制栏顶部往下约 22px 处
-        let left = 20.0;
-        let right = w as f64 - 20.0;
-        let y = 22.0;
+        // Windows 版实测：左右边距 24，条在栏顶往下 5px，高 4px，
+        // 轨迹圆角 2。静止时**不画滑块**，只有鼠标悬停进度条才浮出。
+        let left = 24.0;
+        let right = w as f64 - 24.0;
+        let y = 5.0;
         let frac = if snap.len_ms > 0 {
             (snap.pos_ms as f64 / snap.len_ms as f64).clamp(0.0, 1.0)
         } else {
             0.0
         };
-        // 轨道 / 已播放 / 滑块全部按官方 QSS：4px 高、圆角 2、主色 #425FFF
-        style::draw_seek(ctx, &self.icons, left, right, y, frac);
+        ctx.new_path();
+        style::rounded_rect(ctx, left, y, right - left, 4.0, 2.0);
+        ctx.set_source_rgba(
+            style::TRACK_ADD.0,
+            style::TRACK_ADD.1,
+            style::TRACK_ADD.2,
+            style::TRACK_ADD.3,
+        );
+        let _ = ctx.fill();
+        if frac > 0.0 {
+            ctx.new_path();
+            style::rounded_rect(ctx, left, y, (right - left) * frac, 4.0, 2.0);
+            ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
+            let _ = ctx.fill();
+        }
+        // hover 时才画一个 12px 的白点，跟官方一致（静态帧里没有滑块）
+        if self.hover == Some(Btn::Seek) {
+            let cx = left + (right - left) * frac;
+            ctx.new_path();
+            let _ = ctx.arc(cx, y + 2.0, 6.0, 0.0, std::f64::consts::TAU);
+            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            let _ = ctx.fill();
+        }
         self.hits.push(Hit {
-            rect: (left as i16, (y - 9.0) as i16, (right - left) as i16, 24),
+            rect: (left as i16, (y - 6.0) as i16, (right - left) as i16, 16),
             btn: Btn::Seek,
             index: 0,
         });
@@ -380,7 +502,8 @@ impl ControlBar {
     fn draw_buttons(&mut self, ctx: &Context, snap: &Snapshot, w: i32, h: i32) {
         // 布局按 Windows 版实测：按钮位 56px、图标 24px、行中心距底 32px、
         // 左起第一个按钮中心距左边 36px（即 slot 从 8 开始）
-        let cy = h as f64 - 32.0;
+        // 按钮行中心距栏顶 35px（实测 787..808 的中点 ≈ 797，栏顶 762）
+        let cy = h as f64 - 31.0;
         let mut x = 8.0;
 
         let (play_k, play_h) = if snap.playing {
@@ -397,21 +520,6 @@ impl ControlBar {
         x += 9.0;
         self.text_a(ctx, &time, x, cy + FONT_SMALL / 2.8, FONT_SMALL, FG);
         x += self.text_width(ctx, &time, FONT_SMALL) + 16.0;
-        if !snap.title.is_empty() {
-            let max_w = (w as f64 * 0.26).max(80.0);
-            let mut t = snap.title.clone();
-            while self.text_width(ctx, &t, FONT_SMALL) > max_w && t.chars().count() > 4 {
-                let cut = t
-                    .char_indices()
-                    .nth(t.chars().count().saturating_sub(2))
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                t.truncate(cut);
-                t.push('…');
-            }
-            self.text_a(ctx, &t, x, cy + FONT_SMALL / 2.8, FONT_SMALL, FG_DIM);
-        }
-
         // 右簇（从右往左）：全屏 · 音量 · 设置 · 音轨 · 选集 · 原画 · 倍速
         // 官方控制栏没有关闭、没有字幕按钮、没有「⋯」，齿轮就是设置入口
         let mut rx = w as f64;
@@ -430,7 +538,8 @@ impl ControlBar {
         rx = self.icon_right(ctx, rx, cy, Btn::Volume, vol_k, vol_h, None, true);
         rx = self.icon_right(ctx, rx, cy, Btn::More, "more", "more_hover", None, true);
         rx = self.icon_right(ctx, rx, cy, Btn::Audio, "audio", "audio_hover", None, true);
-        rx = self.icon_right(ctx, rx, cy, Btn::Episode, "episode", "episode_hover", None, true);
+        // 实测顺序（右→左）：全屏 · 音量 · 齿轮(设置) · 音轨 · 字幕 · 清晰度 · 倍速
+        rx = self.icon_right(ctx, rx, cy, Btn::Subtitle, "subtitle", "subtitle_hover", None, true);
         rx = self.text_btn_right(ctx, rx, cy, Btn::Quality, &label_or(&snap.quality, "原画"));
         rx = self.text_btn_right(ctx, rx, cy, Btn::Rate, &fmt_rate(snap.rate));
         let _ = rx;
@@ -524,7 +633,7 @@ impl ControlBar {
 
     /// 右对齐的纯文字按钮（官方的倍速、清晰度都是这种：平时无底色，hover 才有淡块）
     fn text_btn_right(&mut self, ctx: &Context, rx: f64, cy: f64, btn: Btn, label: &str) -> f64 {
-        let tw = self.text_width(ctx, label, FONT_SMALL);
+        let tw = self.text_width(ctx, label, FONT_CN);
         let bw = (tw + 32.0).max(BTN_SLOT);
         let x = rx - bw;
         let hovered = self.hover == Some(btn);
@@ -535,7 +644,7 @@ impl ControlBar {
             let _ = ctx.fill();
         }
         let color = if hovered { (1.0, 1.0, 1.0, 1.0) } else { FG };
-        self.text_a(ctx, label, x + (bw - tw) / 2.0, cy + FONT_SMALL / 2.8, FONT_SMALL, color);
+        self.text_a(ctx, label, x + (bw - tw) / 2.0, cy + FONT_CN / 2.8, FONT_CN, color);
         self.hits.push(Hit {
             rect: (x as i16, (cy - 18.0) as i16, bw as i16, 36),
             btn,
@@ -547,50 +656,38 @@ impl ControlBar {
     // ------------------------------------------------------------------ menu
 
     pub fn open_menu(&mut self, conn: &RustConnection, kind: MenuKind, snap: &Snapshot) {
-        let items: Vec<(String, bool)> = match kind {
-            // 官方倍速列表是降序：2.0x 在最上面
-            MenuKind::Speed => RATES
-                .iter()
-                .rev()
-                .map(|r| (fmt_rate(*r), (snap.rate - r).abs() < 0.01))
-                .collect(),
-            MenuKind::Quality => snap.qualities.clone(),
-            MenuKind::Audio => snap.audios.clone(),
-            MenuKind::Subtitle => snap.subtitles.clone(),
-            MenuKind::Episode => snap.episodes.clone(),
-            MenuKind::More => vec![
-                (format!("循环播放：{}", if snap.looping { "开" } else { "关" }), snap.looping),
-                (
-                    match snap.sleep_min {
-                        Some(m) => format!("睡眠定时：{m} 分钟后暂停"),
-                        None => "睡眠定时：关闭".to_string(),
-                    },
-                    snap.sleep_min.is_some(),
-                ),
-            ],
-        };
-        if items.is_empty() {
-            return;
-        }
-        let (mw, h) = if kind == MenuKind::More {
+        let items = build_items(kind, snap);
+        let (mw, mh) = if kind == MenuKind::More {
             (PANEL_W, PANEL_H)
         } else {
-            (MENU_W, (8.0 + items.len() as f64 * MENU_ROW + 8.0) as u16)
+            (POPUP_W, POPUP_H)
         };
-        let _ = &items;
-        let x = (self.abs_x + self.anchor_x - mw as i16 / 2)
-            .clamp(self.abs_x, self.abs_x + self.width as i16 - mw as i16);
-        let y = self.abs_y - h as i16 - 6;
+        // 官方：小弹层底边贴控制栏顶、水平中心对准触发按钮中心；
+        // 设置面板在窗口内居中。
+        let (x, y) = if kind == MenuKind::More {
+            let wh = self.window_height.max(self.height);
+            (
+                self.abs_x + (self.width as i16 - mw as i16) / 2,
+                self.abs_y + self.height as i16 - wh as i16 + (wh as i16 - mh as i16) / 2,
+            )
+        } else {
+            (
+                (self.abs_x + self.anchor_x - mw as i16 / 2)
+                    .clamp(self.abs_x, self.abs_x + self.width as i16 - mw as i16),
+                self.abs_y - mh as i16,
+            )
+        };
         let _ = conn.configure_window(
             self.menu_win,
             &x11rb::protocol::xproto::ConfigureWindowAux::new()
                 .x(x as i32)
                 .y(y as i32)
                 .width(mw as u32)
-                .height(h as u32),
+                .height(mh as u32),
         );
         self.menu_hover = None;
-        self.menu = Some(MenuState { kind, items, w: mw, h });
+        self.page = 0;
+        self.menu = Some(MenuState { kind, items, w: mw, h: mh });
         let _ = conn.map_window(self.menu_win);
         let _ = conn.configure_window(
             self.menu_win,
@@ -628,102 +725,61 @@ impl ControlBar {
             style::rounded_rect(&ctx, 0.5, 0.5, mw as f64 - 1.0, mh as f64 - 1.0, style::POPUP_RADIUS);
             let _ = ctx.stroke();
 
-            // 只有「播放设置」大面板有标题栏（官方 widTitle + btnClose）；
-            // 倍速/清晰度/音轨/选集这些弹层是无标题栏的单选列表
-            if kind == MenuKind::More {
-                self.text_a(
-                    &ctx,
-                    menu_title(kind),
-                    14.0,
-                    MENU_HEAD / 2.0 + FONT_LABEL / 2.8,
-                    FONT_LABEL,
-                    style::LABEL,
-                );
-                ctx.set_source_rgba(
-                    style::DIVIDER.0,
-                    style::DIVIDER.1,
-                    style::DIVIDER.2,
-                    style::DIVIDER.3,
-                );
-                ctx.rectangle(1.0, MENU_HEAD, mw as f64 - 2.0, 1.0);
-                let _ = ctx.fill();
-                let close_hover = self.menu_hover == Some(usize::MAX);
-                let cx = mw as f64 - 20.0;
-                let cy = MENU_HEAD / 2.0;
-                if close_hover {
-                    ctx.new_path();
-                    let _ = ctx.arc(cx, cy, 12.0, 0.0, std::f64::consts::TAU);
-                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
-                    let _ = ctx.fill();
-                }
-                ctx.new_path();
-                ctx.set_line_width(1.6);
-                ctx.set_source_rgba(1.0, 1.0, 1.0, if close_hover { 1.0 } else { 0.78 });
-                ctx.move_to(cx - 6.0, cy - 6.0);
-                ctx.line_to(cx + 6.0, cy + 6.0);
-                ctx.move_to(cx + 6.0, cy - 6.0);
-                ctx.line_to(cx - 6.0, cy + 6.0);
-                let _ = ctx.stroke();
-                self.menu_hits.push(Hit {
-                    rect: ((mw - 32) as i16, 4, 28, (MENU_HEAD - 8.0) as i16),
-                    btn: Btn::MenuClose,
-                    index: 0,
-                });
-            }
-
             if kind == MenuKind::More {
                 let snap = self.last.clone().unwrap_or_default();
-                self.draw_config(&ctx, &snap, mw);
+                self.draw_config(&ctx, &snap, mw, mh);
             } else {
-            let items = self.menu.as_ref().map(|m| m.items.clone()).unwrap_or_default();
-            for (i, (label, selected)) in items.iter().enumerate() {
-                let ty = 8.0 + i as f64 * MENU_ROW;
-                let cy = ty + MENU_ROW / 2.0;
-                let hovered = self.menu_hover == Some(i);
-                if hovered {
-                    ctx.new_path();
-                    style::rounded_rect(&ctx, 6.0, ty + 2.0, mw as f64 - 12.0, MENU_ROW - 4.0, 6.0);
-                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.08);
-                    let _ = ctx.fill();
+                let items = self.menu.as_ref().map(|m| m.items.clone()).unwrap_or_default();
+                let mut y = POPUP_PAD;
+                if kind == MenuKind::Subtitle {
+                    y = self.draw_sub_header(&ctx, mw);
                 }
-                // 官方是单选圆圈：选中 = 主色实心 + 白点，未选 = 灰色空心
-                let cx = 18.0;
-                ctx.new_path();
-                let _ = ctx.arc(cx, cy, 7.0, 0.0, std::f64::consts::TAU);
-                if *selected {
-                    ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
-                    let _ = ctx.fill();
-                    ctx.new_path();
-                    let _ = ctx.arc(cx, cy, 2.8, 0.0, std::f64::consts::TAU);
-                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95);
-                    let _ = ctx.fill();
-                } else {
-                    ctx.set_line_width(1.4);
-                    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.35);
-                    let _ = ctx.stroke();
+                for (i, it) in items.iter().enumerate() {
+                    let h = row_h(it);
+                    let hovered = self.menu_hover == Some(i);
+                    if hovered {
+                        ctx.new_path();
+                        style::rounded_rect(&ctx, 6.0, y + 2.0, mw as f64 - 12.0, h - 4.0, 6.0);
+                        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.06);
+                        let _ = ctx.fill();
+                    }
+                    let main_cy = if it.sub.is_some() { y + 23.5 } else { y + h / 2.0 };
+                    radio(&ctx, RADIO_X, main_cy, it.selected);
+                    let color = if it.selected || hovered {
+                        (1.0, 1.0, 1.0, 1.0)
+                    } else {
+                        (0.91, 0.91, 0.91, 1.0)
+                    };
+                    let mut t = it.label.clone();
+                    while self.text_width(&ctx, &t, FONT_CN) > mw as f64 - TEXT_X - 16.0
+                        && t.chars().count() > 2
+                    {
+                        let cut = t
+                            .char_indices()
+                            .nth(t.chars().count().saturating_sub(2))
+                            .map(|(c, _)| c)
+                            .unwrap_or(0);
+                        t.truncate(cut);
+                        t.push('…');
+                    }
+                    self.text_a(&ctx, &t, TEXT_X, main_cy + FONT_CN / 2.8, FONT_CN, color);
+                    if let Some(sub) = it.sub.as_ref() {
+                        self.text_a(
+                            &ctx,
+                            sub,
+                            TEXT_X,
+                            y + 50.5 + FONT_SUB / 2.8,
+                            FONT_SUB,
+                            style::SUB_FG,
+                        );
+                    }
+                    self.menu_hits.push(Hit {
+                        rect: (6, y as i16, (mw - 12) as i16, h as i16),
+                        btn: Btn::MenuItem,
+                        index: i,
+                    });
+                    y += h;
                 }
-                let color = if *selected || hovered {
-                    (1.0, 1.0, 1.0, 1.0)
-                } else {
-                    FG
-                };
-                let mut t = label.clone();
-                while self.text_width(&ctx, &t, FONT) > mw as f64 - 60.0 && t.chars().count() > 3 {
-                    let cut = t
-                        .char_indices()
-                        .nth(t.chars().count().saturating_sub(2))
-                        .map(|(c, _)| c)
-                        .unwrap_or(0);
-                    t.truncate(cut);
-                    t.push('…');
-                }
-                self.text_a(&ctx, &t, 46.0, cy + FONT_SMALL / 2.8, FONT, color);
-                self.menu_hits.push(Hit {
-                    rect: (6, ty as i16, (mw - 12) as i16, MENU_ROW as i16),
-                    btn: Btn::MenuItem,
-                    index: i,
-                });
-            }
             }
         }
         let (w, h) = match self.menu.as_ref() {
@@ -733,181 +789,364 @@ impl ControlBar {
         self.blit(conn, &mut surface, self.menu_win, w, h);
     }
 
-    /// 官方 ConfigPopup：一个很大的设置面板，按「分组标签 + 胶囊按钮」排。
-    /// 没实现的项画灰、不挂命中区（点了不会有反应，也不会误导）。
-    fn draw_config(&mut self, ctx: &Context, snap: &Snapshot, mw: i32) {
-        let x0 = 20.0;
-        let mut y = MENU_HEAD + 30.0;
-
-        let chips: Vec<(String, bool)> = RATES
-            .iter()
-            .map(|r| (fmt_rate(*r), (snap.rate - r).abs() < 0.01))
-            .collect();
-        self.chip_row(ctx, x0, y, "播放速度", &chips, 100, true);
-        y += 46.0;
-
-        let chips = vec![
-            ("开".to_string(), snap.looping),
-            ("关".to_string(), !snap.looping),
-        ];
-        self.chip_row(ctx, x0, y, "循环播放", &chips, 200, true);
-        y += 46.0;
-
-        let chips: Vec<(String, bool)> = [0u32, 10, 15, 30, 60]
-            .iter()
-            .map(|m| {
-                let label = if *m == 0 {
-                    "关闭".to_string()
-                } else {
-                    format!("{m} 分钟")
-                };
-                let on = if *m == 0 {
-                    snap.sleep_min.is_none()
-                } else {
-                    snap.sleep_min == Some(*m)
-                };
-                (label, on)
-            })
-            .collect();
-        self.chip_row(ctx, x0, y, "睡眠定时", &chips, 300, true);
-        y += 52.0;
-        self.config_divider(ctx, mw, y - 20.0);
-
-        // 以下两组属于功能缺口：连播策略依赖 12/1 的列表策略，解码/解复用
-        // 在 libvlc 3 里没有运行时切换接口
-        let chips = vec![
-            ("顺序播放".to_string(), !snap.looping),
-            ("单集循环".to_string(), snap.looping),
-            ("随机播放".to_string(), false),
-        ];
-        self.chip_row(ctx, x0, y + 12.0, "连播策略", &chips, 400, false);
-        y += 58.0;
-
-        let chips = vec![
-            ("硬解".to_string(), false),
-            ("软解".to_string(), true),
-        ];
-        self.chip_row(ctx, x0, y, "解码方式", &chips, 500, false);
-        y += 46.0;
-
-        let chips = vec![
-            ("AVCodec".to_string(), true),
-            ("VLC".to_string(), false),
-        ];
-        self.chip_row(ctx, x0, y, "解复用", &chips, 600, false);
-        y += 52.0;
-        self.config_divider(ctx, mw, y - 20.0);
-
-        self.text_a(
-            ctx,
-            "画面调节（亮度/对比度/饱和度）、字幕样式、快捷键、分享、直播：暂未实现",
-            x0,
-            y + 14.0,
-            FONT_LABEL,
-            (1.0, 1.0, 1.0, 0.35),
-        );
-    }
-
-    /// 面板里的一行：左侧标签 + 右侧一排胶囊。
-    fn chip_row(
-        &mut self,
-        ctx: &Context,
-        x0: f64,
-        y: f64,
-        label: &str,
-        chips: &[(String, bool)],
-        base: usize,
-        enabled: bool,
-    ) {
-        let lab = if enabled {
-            style::LABEL
-        } else {
-            (1.0, 1.0, 1.0, 0.28)
-        };
-        self.text_a(ctx, label, x0, y + 5.0, FONT_LABEL, lab);
-        let mut x = x0 + 96.0;
-        for (i, (text, selected)) in chips.iter().enumerate() {
-            let tw = self.text_width(ctx, text, FONT_SMALL);
-            let bw = tw + 24.0;
-            let bh = 30.0;
-            let hovered = enabled && self.menu_hover == Some(base + i);
-            if *selected || hovered {
-                ctx.new_path();
-                style::rounded_rect(ctx, x, y - bh / 2.0 + 5.0, bw, bh, 8.0);
-                // 官方 btnSpeed 口径：灰底胶囊；选中/悬停用主色淡底
-                let alpha = if *selected { 0.18 } else { MENU_SEL.3 };
-                ctx.set_source_rgba(MENU_SEL.0, MENU_SEL.1, MENU_SEL.2, alpha);
-                let _ = ctx.fill();
-            }
-            let color = if !enabled {
-                (1.0, 1.0, 1.0, 0.3)
-            } else if *selected || hovered {
-                (1.0, 1.0, 1.0, 1.0)
-            } else {
-                FG
-            };
-            self.text_a(ctx, text, x + 12.0, y + 5.0, FONT_SMALL, color);
-            if enabled {
-                self.menu_hits.push(Hit {
-                    rect: (x as i16, (y - 10.0) as i16, bw as i16, 30),
-                    btn: Btn::MenuItem,
-                    index: base + i,
-                });
-            }
-            x += bw + 8.0;
-        }
-    }
-
-    fn config_divider(&self, ctx: &Context, mw: i32, y: f64) {
+    /// 字幕弹层头部：`搜索` 药丸 + `+ 添加` + `调整`，下方 1px 分隔线。
+    /// 返回列表起始 y。
+    fn draw_sub_header(&mut self, ctx: &Context, mw: i32) -> f64 {
+        let (pw, ph, py) = (96.0, 30.0, 13.0);
+        ctx.new_path();
+        style::rounded_rect(ctx, 20.0, py, pw, ph, 15.0);
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.14);
+        let _ = ctx.fill();
+        self.text_a(ctx, "搜索", 50.0, py + ph / 2.0 + FONT_CN / 2.8, FONT_CN, (1.0, 1.0, 1.0, 1.0));
+        self.text_a(ctx, "+ 添加", 136.0, py + ph / 2.0 + FONT_CN / 2.8, FONT_CN, style::LABEL_HI);
+        self.text_a(ctx, "调整", 232.0, py + ph / 2.0 + FONT_CN / 2.8, FONT_CN, style::LABEL_HI);
+        self.menu_hits.push(Hit { rect: (20, py as i16, pw as i16, ph as i16), btn: Btn::SubSearch, index: 0 });
+        self.menu_hits.push(Hit { rect: (130, py as i16, 66, ph as i16), btn: Btn::SubAdd, index: 0 });
+        self.menu_hits.push(Hit { rect: (226, py as i16, 60, ph as i16), btn: Btn::SubAdjust, index: 0 });
         ctx.set_source_rgba(
             style::DIVIDER.0,
             style::DIVIDER.1,
             style::DIVIDER.2,
             style::DIVIDER.3,
         );
-        ctx.rectangle(20.0, y, mw as f64 - 40.0, 1.0);
+        ctx.rectangle(0.0, HEAD_H, mw as f64, 1.0);
         let _ = ctx.fill();
+        HEAD_H + POPUP_PAD
     }
 
-    /// Click inside the popup menu: returns the command and closes the menu.
-    pub fn on_menu_click(&mut self, x: i16, y: i16) -> Option<Command> {
-        let mut chosen = None;
+    /// 官方设置面板：720×490，左栏 178 九分组 + 右栏内容。
+    fn draw_config(&mut self, ctx: &Context, snap: &Snapshot, mw: i32, mh: i32) {
+        let pw = mw as f64;
+        // 标题栏
+        self.text_a(ctx, "播放设置", 25.0, HEAD_H / 2.0 + FONT_CN / 2.8, FONT_CN, style::LABEL_HI);
+        ctx.set_source_rgba(
+            style::DIVIDER.0,
+            style::DIVIDER.1,
+            style::DIVIDER.2,
+            style::DIVIDER.3,
+        );
+        ctx.rectangle(0.0, HEAD_H, pw, 1.0);
+        let _ = ctx.fill();
+        let close_hover = self.menu_hover == Some(usize::MAX);
+        let (cx, cy) = (pw - 30.0, HEAD_H / 2.0);
+        if close_hover {
+            ctx.new_path();
+            let _ = ctx.arc(cx, cy, 12.0, 0.0, std::f64::consts::TAU);
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+            let _ = ctx.fill();
+        }
+        ctx.new_path();
+        ctx.set_line_width(1.6);
+        ctx.set_source_rgba(1.0, 1.0, 1.0, if close_hover { 1.0 } else { 0.78 });
+        ctx.move_to(cx - 6.0, cy - 6.0);
+        ctx.line_to(cx + 6.0, cy + 6.0);
+        ctx.move_to(cx + 6.0, cy - 6.0);
+        ctx.line_to(cx - 6.0, cy + 6.0);
+        let _ = ctx.stroke();
+        self.menu_hits.push(Hit {
+            rect: ((pw - 46.0) as i16, 10, 32, (HEAD_H - 20.0) as i16),
+            btn: Btn::MenuClose,
+            index: 0,
+        });
+
+        // 左栏
+        let mut y = 95.5;
+        for (i, name) in GROUPS.iter().enumerate() {
+            let selected = i == self.page;
+            if selected {
+                ctx.new_path();
+                style::rounded_rect(ctx, 12.0, y - 24.0, SIDE_W - 25.0, 48.0, 6.0);
+                ctx.set_source_rgba(ACCENT.0, ACCENT.1, ACCENT.2, 0.16);
+                let _ = ctx.fill();
+            }
+            let color = if selected {
+                (0.44, 0.55, 1.0, 1.0)
+            } else {
+                (0.91, 0.91, 0.91, 1.0)
+            };
+            self.text_a(ctx, name, 25.0, y + FONT_CN / 2.8, FONT_CN, color);
+            self.menu_hits.push(Hit {
+                rect: (8, (y - 22.0) as i16, (SIDE_W - 16.0) as i16, 44),
+                btn: Btn::MenuGroup,
+                index: i,
+            });
+            y += ITEM_H;
+        }
+        ctx.set_source_rgba(
+            style::DIVIDER.0,
+            style::DIVIDER.1,
+            style::DIVIDER.2,
+            style::DIVIDER.3,
+        );
+        ctx.rectangle(SIDE_W, HEAD_H, 1.0, mh as f64 - HEAD_H);
+        let _ = ctx.fill();
+
+        // 右栏标题 + 分隔线
+        self.text_a(
+            ctx,
+            GROUPS[self.page.min(GROUPS.len() - 1)],
+            SIDE_W + CONTENT_PAD,
+            95.0 + FONT_CN / 2.8,
+            FONT_CN,
+            (1.0, 1.0, 1.0, 1.0),
+        );
+        ctx.rectangle(SIDE_W + 1.0, 117.0, pw - SIDE_W - 2.0, 1.0);
+        let _ = ctx.fill();
+
+        match self.page {
+            0 => self.page_radios(ctx, &AUDIO_CH, 155.0, pw),
+            1 => self.page_desc_radios(ctx, HDR_OPTS, self.sel[1], pw),
+            2 => self.page_sliders(ctx, pw, mh),
+            3 => self.page_desc_radios(ctx, DECODE_OPTS, 0, pw),
+            4 => self.page_desc_radios(ctx, DEMUX_OPTS, 0, pw),
+            5 => self.page_steppers(ctx),
+            6 => self.page_shortcuts(ctx, pw),
+            7 => {
+                let idx = if snap.looping { 1 } else { 0 };
+                self.page_desc_radios(ctx, LOOP_OPTS, idx, pw)
+            }
+            _ => self.page_timer(ctx, snap, pw),
+        }
+    }
+
+    /// 单选列表（无副文案）：首行中心 y0，行距 52。
+    fn page_radios(&mut self, ctx: &Context, items: &[&str], y0: f64, pw: f64) {
+        for (i, name) in items.iter().enumerate() {
+            let cy = y0 + i as f64 * 52.0;
+            let selected = i == self.sel[0];
+            radio(ctx, SIDE_W + 39.0, cy, selected);
+            self.text_a(
+                ctx,
+                name,
+                SIDE_W + 63.0,
+                cy + FONT_CN / 2.8,
+                FONT_CN,
+                if selected { (1.0, 1.0, 1.0, 1.0) } else { (0.88, 0.88, 0.88, 1.0) },
+            );
+            self.menu_hits.push(Hit {
+                rect: ((SIDE_W + 20.0) as i16, (cy - 22.0) as i16, (pw - SIDE_W - 50.0) as i16, 44),
+                btn: Btn::MenuRow,
+                index: 1000 + i,
+            });
+        }
+    }
+
+    /// 单选 + 说明文字（HDR / 解码 / 解封装 / 循环播放）。
+    fn page_desc_radios(&mut self, ctx: &Context, items: &[(&str, &str)], sel: usize, pw: f64) {
+        let mut y = 132.0;
+        for (i, (label, desc)) in items.iter().enumerate() {
+            let selected = i == sel;
+            radio(ctx, SIDE_W + 39.0, y, selected);
+            self.text_a(
+                ctx,
+                label,
+                SIDE_W + 63.0,
+                y + FONT_CN / 2.8,
+                FONT_CN,
+                if selected { (1.0, 1.0, 1.0, 1.0) } else { (0.88, 0.88, 0.88, 1.0) },
+            );
+            let lines = wrap(ctx, desc, pw - SIDE_W - CONTENT_PAD - 40.0, FONT_SUB);
+            for (li, line) in lines.iter().take(2).enumerate() {
+                self.text_a(
+                    ctx,
+                    line,
+                    SIDE_W + 63.0,
+                    y + 24.0 + li as f64 * 19.0 + FONT_SUB / 2.8,
+                    FONT_SUB,
+                    style::SUB_FG,
+                );
+            }
+            let h = 44.0 + lines.len().min(2) as f64 * 19.0;
+            self.menu_hits.push(Hit {
+                rect: ((SIDE_W + 20.0) as i16, (y - 22.0) as i16, (pw - SIDE_W - 50.0) as i16, h as i16),
+                btn: Btn::MenuRow,
+                index: 1000 + i,
+            });
+            y += h + 12.0;
+        }
+    }
+
+    fn page_sliders(&mut self, ctx: &Context, pw: f64, mh: i32) {
+        let names = ["亮度", "对比度", "色调", "饱和度"];
+        let mut y = 160.0;
+        for name in names.iter() {
+            self.text_a(ctx, name, SIDE_W + 26.0, y + FONT_CN / 2.8, FONT_CN, (0.9, 0.9, 0.9, 1.0));
+            let (x0, x1) = (SIDE_W + 120.0, pw - 60.0);
+            ctx.new_path();
+            style::rounded_rect(ctx, x0, y - 2.0, x1 - x0, 4.0, 2.0);
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.15);
+            let _ = ctx.fill();
+            // 值为 0 时滑块在正中（官方默认 0）
+            let cx = x0 + (x1 - x0) / 2.0;
+            ctx.new_path();
+            let _ = ctx.arc(cx, y, 7.0, 0.0, std::f64::consts::TAU);
+            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            let _ = ctx.fill();
+            self.text_a(ctx, "0", x1 + 14.0, y + FONT_CN / 2.8, FONT_CN, (0.85, 0.85, 0.85, 1.0));
+            y += 46.0;
+        }
+        let (bw, bh) = (76.0, 30.0);
+        let bx = pw - 24.0 - bw;
+        let by = mh as f64 - 30.0 - bh;
+        ctx.new_path();
+        style::rounded_rect(ctx, bx, by, bw, bh, 6.0);
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+        let _ = ctx.fill();
+        self.text_a(ctx, "重置", bx + 26.0, by + bh / 2.0 + FONT_CN / 2.8, FONT_CN, (0.95, 0.95, 0.95, 1.0));
+    }
+
+    fn page_steppers(&mut self, ctx: &Context) {
+        let rows = [
+            ("左右箭头快进快退", "10s"),
+            ("上下箭头音量调整", "5%"),
+            ("ctrl+加减号缩放窗体", "10%"),
+        ];
+        let mut y = 150.0;
+        for (name, val) in rows.iter() {
+            self.text_a(ctx, name, SIDE_W + 26.0, y + FONT_CN / 2.8, FONT_CN, (0.9, 0.9, 0.9, 1.0));
+            let bx = 470.0;
+            let (bw, bh) = (92.0, 30.0);
+            ctx.new_path();
+            style::rounded_rect(ctx, bx, y - bh / 2.0, bw, bh, 6.0);
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+            let _ = ctx.fill();
+            self.text_a(ctx, val, bx + 40.0, y + FONT_CN / 2.8, FONT_CN, (0.95, 0.95, 0.95, 1.0));
+            for (k, sign) in ["−", "+"].iter().enumerate() {
+                let mx = bx + bw + 12.0 + k as f64 * 34.0;
+                ctx.new_path();
+                style::rounded_rect(ctx, mx, y - bh / 2.0, 30.0, bh, 6.0);
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+                let _ = ctx.fill();
+                self.text_a(ctx, sign, mx + 12.0, y + FONT_CN / 2.8, FONT_CN, (0.95, 0.95, 0.95, 1.0));
+            }
+            y += 54.0;
+        }
+    }
+
+    fn page_shortcuts(&mut self, ctx: &Context, pw: f64) {
+        let rows = SHORTCUTS;
+        let mut y = 138.0;
+        self.text_a(ctx, "更多快捷键指南", SIDE_W + 26.0, y + FONT_CN / 2.8, FONT_CN, style::LABEL_HI);
+        y += 44.0;
+        for (name, key) in rows.iter() {
+            self.text_a(ctx, name, SIDE_W + 26.0, y + FONT_CN / 2.8, FONT_CN, (0.88, 0.88, 0.88, 1.0));
+            self.text_a(ctx, key, 470.0, y + FONT_CN / 2.8, FONT_CN, style::SUB_FG);
+            let (tx, ty, tw, th) = (pw - 54.0, y - 10.0, 34.0, 20.0);
+            ctx.new_path();
+            style::rounded_rect(ctx, tx, ty, tw, th, 10.0);
+            ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
+            let _ = ctx.fill();
+            ctx.new_path();
+            let _ = ctx.arc(tx + tw - 10.0, ty + th / 2.0, 7.0, 0.0, std::f64::consts::TAU);
+            ctx.set_source_rgb(1.0, 1.0, 1.0);
+            let _ = ctx.fill();
+            y += 38.0;
+        }
+    }
+
+    fn page_timer(&mut self, ctx: &Context, snap: &Snapshot, pw: f64) {
+        let by_ep: [&str; 4] = ["播放完本集", "播放2集", "播放3集", "播放5集"];
+        let by_min: [&str; 4] = ["10分钟", "15分钟", "30分钟", "60分钟"];
+        self.text_a(ctx, "按集数", SIDE_W + 26.0, 150.0, FONT_CN, style::LABEL_HI);
+        for (i, name) in by_ep.iter().enumerate() {
+            let col = i % 2;
+            let row = i / 2;
+            let cx = SIDE_W + 39.0 + col as f64 * 250.0;
+            let cy = 186.0 + row as f64 * 50.0;
+            radio(ctx, cx, cy, false);
+            self.text_a(ctx, name, cx + 24.0, cy + FONT_CN / 2.8, FONT_CN, (0.88, 0.88, 0.88, 1.0));
+            self.menu_hits.push(Hit {
+                rect: ((cx - 16.0) as i16, (cy - 20.0) as i16, 220, 40),
+                btn: Btn::MenuRow,
+                index: 3000 + i,
+            });
+        }
+        self.text_a(ctx, "按时长", SIDE_W + 26.0, 300.0, FONT_CN, style::LABEL_HI);
+        for (i, name) in by_min.iter().enumerate() {
+            let col = i % 2;
+            let row = i / 2;
+            let cx = SIDE_W + 39.0 + col as f64 * 250.0;
+            let cy = 336.0 + row as f64 * 50.0;
+            let mins = [10u32, 15, 30, 60][i];
+            let selected = snap.sleep_min == Some(mins);
+            radio(ctx, cx, cy, selected);
+            self.text_a(ctx, name, cx + 24.0, cy + FONT_CN / 2.8, FONT_CN, (0.88, 0.88, 0.88, 1.0));
+            self.menu_hits.push(Hit {
+                rect: ((cx - 16.0) as i16, (cy - 20.0) as i16, 220, 40),
+                btn: Btn::MenuRow,
+                index: 3100 + i,
+            });
+        }
+        let _ = pw;
+    }
+
+    /// 弹层/面板里的点击。小弹层选完即关；设置面板保持打开（除关闭叉）。
+    pub fn on_menu_click(&mut self, conn: &RustConnection, x: i16, y: i16) -> Option<Command> {
+        let mut hit = None;
         if let Some(menu) = self.menu.as_ref() {
             for h in &self.menu_hits {
                 let (hx, hy, hw, hh) = h.rect;
                 if x >= hx && x <= hx + hw && y >= hy && y <= hy + hh {
-                    // 关闭叉只关菜单，不选任何一项
-                    if h.btn != Btn::MenuClose {
-                        chosen = Some((menu.kind, h.index));
-                    }
+                    hit = Some((menu.kind, h.btn, h.index));
                     break;
                 }
             }
         }
-        self.menu = None;
-        // 设置面板：索引按分组编码（100+ 倍速、200 循环、300+ 睡眠）
-        if let Some((MenuKind::More, idx)) = chosen {
-            return match idx {
-                100..=105 => RATES.get(idx - 100).map(|r| Command::SetRate(*r)),
-                200 => Some(Command::SetLoop(true)),
-                201 => Some(Command::SetLoop(false)),
-                300 => Some(Command::SetSleepTimer(0)),
-                301..=304 => Some(Command::SetSleepTimer([0u32, 10, 15, 30, 60][idx - 300])),
-                _ => None,
-            };
+        let Some((kind, btn, idx)) = hit else {
+            self.close_menu(conn);
+            return None;
+        };
+        if kind == MenuKind::More {
+            match btn {
+                Btn::MenuClose => self.close_menu(conn),
+                Btn::MenuGroup => {
+                    self.page = idx;
+                    self.draw_menu(conn);
+                }
+                Btn::MenuRow => {
+                    // 3000+ 按集数（暂无实现）、3100+ 按时长（接睡眠定时）
+                    if idx >= 3100 {
+                        let mins = [10u32, 15, 30, 60][idx - 3100];
+                        self.draw_menu(conn);
+                        return Some(Command::SetSleepTimer(mins));
+                    }
+                    if idx >= 3000 {
+                        self.draw_menu(conn);
+                        return None;
+                    }
+                    let row = idx - 1000;
+                    self.sel[self.page] = row;
+                    let cmd = if self.page == 7 {
+                        // 顺序播放=关；单视频/全部/随机都先按「循环开」处理
+                        Some(Command::SetLoop(row != 0))
+                    } else {
+                        None
+                    };
+                    self.draw_menu(conn);
+                    return cmd;
+                }
+                _ => self.close_menu(conn),
+            }
+            return None;
         }
-        match chosen {
-            Some((MenuKind::Speed, i)) => RATES
-                .iter()
-                .rev()
-                .nth(i)
-                .map(|r| Command::SetRate(*r)),
-            Some((MenuKind::Quality, i)) => Some(Command::SelectQuality(i)),
-            Some((MenuKind::Audio, i)) => Some(Command::SelectAudio(i)),
-            Some((MenuKind::Subtitle, i)) => Some(Command::SelectSubtitle(i as i64)),
-            Some((MenuKind::Episode, i)) => Some(Command::PlayEpisode(i)),
+        if matches!(btn, Btn::SubSearch | Btn::SubAdd | Btn::SubAdjust) {
+            // 在线搜索 / 添加本地字幕 / 字幕样式面板还没做，先只关闭并留日志
+            eprintln!("[bar] 字幕弹层头部按钮未实现：{btn:?}");
+            self.close_menu(conn);
+            return None;
+        }
+        let cmd = match (kind, btn) {
+            (MenuKind::Speed, Btn::MenuItem) => {
+                RATES.iter().rev().nth(idx).map(|r| Command::SetRate(*r))
+            }
+            (MenuKind::Quality, _) => Some(Command::SelectQuality(idx)),
+            (MenuKind::Audio, _) => Some(Command::SelectAudio(idx)),
+            (MenuKind::Subtitle, _) => Some(Command::SelectSubtitle(idx as i64)),
+            (MenuKind::Episode, _) => Some(Command::PlayEpisode(idx)),
             _ => None,
-        }
+        };
+        self.close_menu(conn);
+        cmd
     }
 
     // ----------------------------------------------------------------- input
@@ -1060,4 +1299,85 @@ fn fmt_time(ms: i64) -> String {
     let s = total % 60;
     // 官方时间轴是 `00:25:33 / 01:40:50`，小时位即使是 0 也带前导零
     format!("{h:02}:{m:02}:{s:02}")
+}
+
+// ------------------------------------------------------------------ helpers
+
+fn build_items(kind: MenuKind, snap: &Snapshot) -> Vec<MenuItem> {
+    let conv = |v: &Vec<(String, bool)>| -> Vec<MenuItem> {
+        v.iter()
+            .map(|(l, sel)| {
+                let (label, sub) = split_label(l);
+                MenuItem { label, sub, selected: *sel }
+            })
+            .collect()
+    };
+    match kind {
+        // 官方倍速列表是降序：2.0x 在最上面
+        MenuKind::Speed => RATES
+            .iter()
+            .rev()
+            .map(|r| MenuItem {
+                label: fmt_rate(*r),
+                sub: None,
+                selected: (snap.rate - r).abs() < 0.01,
+            })
+            .collect(),
+        MenuKind::Quality => conv(&snap.qualities),
+        MenuKind::Audio => conv(&snap.audios),
+        MenuKind::Subtitle => conv(&snap.subtitles),
+        MenuKind::Episode => conv(&snap.episodes),
+        MenuKind::More => Vec::new(),
+    }
+}
+
+/// 官方单选圆圈：直径 16，选中 = 主色实心 + 白点，未选 = 1.4px 空心圈。
+fn radio(ctx: &Context, cx: f64, cy: f64, selected: bool) {
+    ctx.new_path();
+    let _ = ctx.arc(cx, cy, 8.0, 0.0, std::f64::consts::TAU);
+    if selected {
+        ctx.set_source_rgb(ACCENT.0, ACCENT.1, ACCENT.2);
+        let _ = ctx.fill();
+        ctx.new_path();
+        let _ = ctx.arc(cx, cy, 3.2, 0.0, std::f64::consts::TAU);
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95);
+        let _ = ctx.fill();
+    } else {
+        ctx.set_line_width(1.4);
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.35);
+        let _ = ctx.stroke();
+    }
+}
+
+/// 按像素宽度折行。
+fn wrap(ctx: &Context, text: &str, max_w: f64, size: f64) -> Vec<String> {
+    let _ = size;
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for ch in text.chars() {
+        cur.push(ch);
+        let w = ctx.text_extents(&cur).map(|e| e.x_advance()).unwrap_or(0.0);
+        if w > max_w {
+            cur.pop();
+            if let Some(pos) = cur.rfind(' ') {
+                if pos > 6 {
+                    let rest = cur.split_off(pos + 1);
+                    out.push(cur.clone());
+                    cur = rest;
+                    cur.push(ch);
+                    continue;
+                }
+            }
+            out.push(cur.clone());
+            cur.clear();
+            cur.push(ch);
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
 }

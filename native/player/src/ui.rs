@@ -486,8 +486,9 @@ impl AppWindow {
                         }
                     } else if Some(e.event) == menu_id {
                         if let Some(mut bar) = self.bar.take() {
-                            let cmd = bar.on_menu_click(e.event_x, e.event_y);
-                            bar.close_menu(&self.conn);
+                            // 关闭动作由 on_menu_click 自己决定：
+                            // 小弹层选完即关，设置面板要保持打开。
+                            let cmd = bar.on_menu_click(&self.conn, e.event_x, e.event_y);
                             self.bar = Some(bar);
                             if let Some(cmd) = cmd {
                                 self.dispatch(cmd, tx);
@@ -667,6 +668,7 @@ impl AppWindow {
     fn place_bar(&mut self) {
         let (x, y, w, h) = self.geom;
         if let Some(bar) = self.bar.as_mut() {
+            bar.window_height = h;
             bar.place(&self.conn, x, y + h as i16 - BAR_H as i16, w);
         }
         if let Some(ov) = self.overlay.as_mut() {
