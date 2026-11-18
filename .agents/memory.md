@@ -1765,3 +1765,17 @@
 - 待用户实测：装 native.17 → 登录 → 唤起快捷笔记 → 右键应稳定停在
   「隐藏悬浮窗 / 打开记事本」，不再出现「检查元素」；日志里应看到
   `[memo] menu popped at ...` 且 `menu closed after` 是用户点掉/点外时才出现。
+
+## 2026-11-18 打包 native.16（全屏修复 + 字体修正）
+
+- 产物：`build/com.zspace.native.spark_2.46.2026101501+native.16-1_amd64.deb`
+  117,406,364 B；SHA256 `dc2267acaec325387fc3fb9d892750f2800a0ad4fb3f7b4a80f7737874672145`。
+- 包内 `uzplayer/zspace-player` SHA256 `7ff9d8ae6772579b7c6fdcbfa10d9aea7504ab3e49c4b2b23a46898bbad3515c`，
+  与本机 `target/release` 一致 —— 确认全屏修复、渐变、删叉都在包里。
+- 同时带了字体修正（`app/zs-fontfix.js` 3663 B + A30–A32 检查），那是另一个会话的工作，
+  这里只做了核对，没有改动。
+- 自检全部通过（A1–A32 / B1–B16 / C1–C6）。
+- **并发打包会把产物做废**：两个会话同时跑 `build_native_deb.sh` 会互相
+  `rm -rf build/native-work`，结果是 dpkg-deb 报一堆 `tar: 无法 stat`，
+  剩下一个 1.7 KB 的空 deb（我第一次就撞上了，已删）。
+  打包前先 `pgrep -af build_native_deb`，有别的实例就等它结束再跑。
