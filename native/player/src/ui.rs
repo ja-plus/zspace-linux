@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, ClientMessageData, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _,
-    CreateWindowAux, EventMask, PropMode, Window, WindowClass,
+    CreateWindowAux, EventMask, PropMode, StackMode, Window, WindowClass,
 };
 use x11rb::protocol::Event as XEvent;
 use x11rb::rust_connection::RustConnection;
@@ -34,18 +34,37 @@ struct Atoms {
     net_wm_state_fullscreen: Atom,
     utf8_string: Atom,
     net_wm_pid: Atom,
+    net_moveresize: Atom,
+    net_frame_extents: Atom,
+}
+
+/// 退出全屏后待校验的还原任务。
+#[derive(Clone, Copy)]
+struct PendingRestore {
+    /// 目标几何（进入全屏前的位置与尺寸，内容区根坐标）
+    geom: (i16, i16, u16, u16),
+    /// 进入全屏前的窗口装饰尺寸 (left, top) —— 全屏期间读不到，必须提前存
+    frame: (i16, i16),
+    /// 已经重试了几次，超过 4 次就交回 WM
+    attempts: u8,
+    /// 下次检查时间
+    next_at: Instant,
 }
 
 pub struct AppWindow {
-    conn: RustConnection,
-    win: Window,
+    conn: RustConnection,    win: Window,
     bar: Option<ControlBar>,
     overlay: Option<Overlay>,
     geom: (i16, i16, u16, u16),
     /// 进入全屏前的窗口几何，退出全屏时用来还原（有的 WM 不会自己还原）。
     restore_geom: Option<(i16, i16, u16, u16)>,
-    /// 退出全屏后稍等一下再强制还原几何，避免和 WM 的异步还原打架。
-    restore_at: Option<Instant>,
+    /// 进入全屏前的窗口装饰 (left, top)，退出时要用它换算外框坐标
+    restore_frame: (i16, i16),
+    /// 进入全屏后的兜底检查时刻：WM 若没接管就自己铺满屏幕。
+    pending_fullscreen: Option<Instant>,
+    /// 退出全屏后的还原任务：目标几何 + 已重试次数 + 下次检查时间。
+    /// 有的 WM 不还原、有的会还原成别的尺寸，所以不带条件地校验重试。
+    pending_restore: Option<PendingRestore>,
     last_activity: Instant,
     atoms: Atoms,
     min_key: u8,
@@ -112,6 +131,8 @@ impl AppWindow {
             net_wm_state_fullscreen: intern(&conn, b"_NET_WM_STATE_FULLSCREEN")?,
             utf8_string: intern(&conn, b"UTF8_STRING")?,
             net_wm_pid: intern(&conn, b"_NET_WM_PID")?,
+            net_moveresize: intern(&conn, b"_NET_MOVERESIZE_WINDOW")?,
+            net_frame_extents: intern(&conn, b"_NET_FRAME_EXTENTS")?,
         };
 
         conn.change_property32(
@@ -166,7 +187,9 @@ impl AppWindow {
             overlay: None,
             geom: (x, y, width, height),
             restore_geom: None,
-            restore_at: None,
+            restore_frame: (0, 0),
+            pending_fullscreen: None,
+            pending_restore: None,
             last_activity: Instant::now(),
         };
         window.set_title(&opts.title);
@@ -212,10 +235,80 @@ impl AppWindow {
         let _ = self.conn.flush();
     }
 
+    /// 窗口内容区在根窗口上的真实坐标。
+    /// `ConfigureNotify` 给的 x/y 是相对父窗口（reparenting WM 的 frame）的，
+    /// 直接拿去定位 override-redirect 的控制栏或者还原窗口都会偏一个装饰宽度。
+    fn root_origin(&self) -> (i16, i16) {
+        let root = self.conn.setup().roots[0].root;
+        match self.conn.translate_coordinates(self.win, root, 0, 0) {
+            Ok(cookie) => match cookie.reply() {
+                Ok(r) => (r.dst_x as i16, r.dst_y as i16),
+                Err(_) => (self.geom.0, self.geom.1),
+            },
+            Err(_) => (self.geom.0, self.geom.1),
+        }
+    }
+
+    /// 窗口装饰（标题栏/边框）的尺寸，顺序是 left, right, top, bottom。
+    /// WM 的移动请求算的是**外框**坐标，内容区坐标要减掉这一圈。
+    fn frame_extents(&self) -> (i16, i16) {
+        let prop = self.conn.get_property(
+            false,
+            self.win,
+            self.atoms.net_frame_extents,
+            AtomEnum::CARDINAL,
+            0,
+            4,
+        );
+        if let Ok(cookie) = prop {
+            if let Ok(reply) = cookie.reply() {
+                let v: Vec<u32> = reply.value32().map(|it| it.collect()).unwrap_or_default();
+                if v.len() >= 4 {
+                    return (v[0] as i16, v[2] as i16);
+                }
+            }
+        }
+        (0, 0)
+    }
+
+    /// 按**根坐标**请求移动/改尺寸。
+    /// 直接 `configure_window` 的 x/y 是相对 frame 的，会被 WM 加一圈装饰偏移；
+    /// `_NET_MOVERESIZE_WINDOW` 是 EWMH 给的标准请求，WM 会自己算装饰。
+    fn request_geometry(&self, x: i16, y: i16, w: u16, h: u16, frame: (i16, i16)) {
+        // gravity = NorthWest(1)，低 8 位；bit8..11 表示 x/y/w/h 有效
+        // 传进来的是内容区根坐标，WM 要的是外框坐标，先减掉装饰
+        let (fl, ft) = frame;
+        let flags = 1u32 | (0xFu32 << 8);
+        let data = ClientMessageData::from([
+            flags,
+            (x - fl) as u32,
+            (y - ft) as u32,
+            w as u32,
+            h as u32,
+        ]);
+        let event = ClientMessageEvent::new(32, self.win, self.atoms.net_moveresize, data);
+        let root = self.conn.setup().roots[0].root;
+        let _ = self.conn.send_event(
+            false,
+            root,
+            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+            event,
+        );
+        // 不支持该协议的 WM 兜底：至少把尺寸改对
+        let _ = self.conn.configure_window(
+            self.win,
+            &ConfigureWindowAux::new().width(w as u32).height(h as u32),
+        );
+        let _ = self.conn.flush();
+    }
+
     fn set_fullscreen(&mut self, on: bool) {
         if on && !self.fullscreen {
             // 记住当前几何（含用户已经手动放大的情况），退出全屏要回到这里。
-            self.restore_geom = Some(self.geom);
+            // 位置必须是根坐标，否则还原后会被 WM 的装饰偏移带偏。
+            let (ox, oy) = self.root_origin();
+            self.restore_frame = self.frame_extents();
+            self.restore_geom = Some((ox, oy, self.geom.2, self.geom.3));
         }
         let action = if on { 1u32 } else { 0u32 };
         let data = ClientMessageData::from([
@@ -225,22 +318,39 @@ impl AppWindow {
             1, // source indication: normal application
             0,
         ]);
+        // EWMH 规定 _NET_WM_STATE 必须发到**根窗口**，掩码是
+        // SubstructureRedirect|SubstructureNotify。之前发到自己的窗口 + NO_EVENT，
+        // WM 根本收不到，只剩下面那句 configure —— 表现就是「窗口变大但没真全屏」。
         let event = ClientMessageEvent::new(32, self.win, self.atoms.net_wm_state, data);
-        let _ = self.conn.send_event(false, self.win, EventMask::NO_EVENT, event);
+        let root = self.conn.setup().roots[0].root;
+        let _ = self.conn.send_event(
+            false,
+            root,
+            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+            event,
+        );
         if on {
-            // Fallback for WMs without EWMH fullscreen support.
+            // 先让 WM 处理；300 ms 后还没铺满再自己兜底
+            self.pending_fullscreen = Some(Instant::now() + Duration::from_millis(300));
+            self.pending_restore = None;
+            // 有的 WM 只改尺寸不抬层级，全屏后仍被任务栏/其它窗口压着，
+            // 这里显式抬到最上层
             let _ = self.conn.configure_window(
                 self.win,
-                &ConfigureWindowAux::new()
-                    .x(0)
-                    .y(0)
-                    .width(self.screen_w as u32)
-                    .height(self.screen_h as u32),
+                &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
             );
-        } else if self.restore_geom.is_some() {
-            // 先只发 EWMH 取消全屏，给 WM 300 ms 自己还原几何；
-            // 到点还在屏幕尺寸才强制压回去，避免和 WM 抢位置（会把窗口越推越偏）。
-            self.restore_at = Some(Instant::now() + Duration::from_millis(1200));
+            let _ = self.conn.flush();
+        } else if let Some(g) = self.restore_geom {
+            // 不等 WM：立刻把几何摆回去，再在主循环里校验几次。
+            // 以前是「等 1.2 s，只有窗口还占满屏宽才强制改」，这样 WM 把窗口
+            // 还原成别的尺寸（比如最大化）时不满足条件，窗口就永远回不到原样。
+            self.request_geometry(g.0, g.1, g.2, g.3, self.restore_frame);
+            self.pending_restore = Some(PendingRestore {
+                geom: g,
+                frame: self.restore_frame,
+                attempts: 0,
+                next_at: Instant::now() + Duration::from_millis(120),
+            });
         }
         let _ = self.conn.flush();
         self.fullscreen = on;
@@ -443,27 +553,49 @@ impl AppWindow {
             }
         }
 
-        // 退出全屏后 300 ms 检查一次：WM 没自己还原（窗口还占满屏宽）才强制压回去。
-        if let Some(at) = self.restore_at {
+        // 进入全屏后 300 ms 兜底：WM 没接管就自己铺满屏幕（无 EWMH 的 WM）
+        if let Some(at) = self.pending_fullscreen {
             if Instant::now() >= at {
-                self.restore_at = None;
-                if let Some((tx, ty, tw, th)) = self.restore_geom {
-                    let (gx, gy, gw, gh) = self.geom;
-                    if gw as f64 >= self.screen_w as f64 * 0.95 {
-                        // 尺寸还占满屏宽：先只改尺寸（位置留给 WM），改完再看位置。
-                        let _ = self.conn.configure_window(
-                            self.win,
-                            &ConfigureWindowAux::new().width(tw as u32).height(th as u32),
+                self.pending_fullscreen = None;
+                let (_, _, gw, gh) = self.geom;
+                let (sw, sh) = (self.screen_w, self.screen_h);
+                if (gw as u32) < (sw as f64 * 0.98) as u32
+                    || (gh as u32) < (sh as f64 * 0.98) as u32
+                {
+                    let _ = self.conn.configure_window(
+                        self.win,
+                        &ConfigureWindowAux::new()
+                            .x(0)
+                            .y(0)
+                            .width(sw as u32)
+                            .height(sh as u32),
+                    );
+                    let _ = self.conn.flush();
+                    eprintln!("[ui] WM 未接管全屏，退化为铺满屏幕 {sw}x{sh}");
+                }
+            }
+        }
+
+        // 退出全屏后的几何校验：尺寸对上就收工，对不上就再压一次，最多 4 次。
+        if let Some(p) = self.pending_restore {
+            if Instant::now() >= p.next_at {
+                let (_, _, gw, gh) = self.geom;
+                let (tx, ty, tw, th) = p.geom;
+                if (gw, gh) == (tw, th) || p.attempts >= 4 {
+                    if (gw, gh) != (tw, th) {
+                        eprintln!(
+                            "[ui] 退出全屏后尺寸仍是 {gw}x{gh}，目标是 {tw}x{th}，交回 WM 处理"
                         );
-                        let _ = self.conn.flush();
-                        self.restore_at = Some(Instant::now() + Duration::from_millis(300));
-                        eprintln!("[ui] WM 未还原全屏前尺寸，强制改回 {tw}x{th}");
-                    } else {
-                        // 尺寸已经回来了：位置由 WM 决定。DDE/treeland 不会把窗口
-                        // 挪回全屏前的位置（停在左上角），客户端 configure x/y
-                        // 对它无效，这里不再强行掰，免得和 WM 抢坐标。
-                        let _ = (tx, ty, gx, gy, gh);
                     }
+                    self.pending_restore = None;
+                } else {
+                    self.request_geometry(tx, ty, tw, th, p.frame);
+                    self.pending_restore = Some(PendingRestore {
+                        attempts: p.attempts + 1,
+                        next_at: Instant::now() + Duration::from_millis(150),
+                        geom: p.geom,
+                        frame: p.frame,
+                    });
                 }
             }
         }

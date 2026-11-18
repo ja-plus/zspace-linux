@@ -8,7 +8,9 @@
 //! play/pause · -10s · +10s · prev · next · time | seek | rate · subtitle ·
 //! audio · quality · episodes · volume+slider · fullscreen · close.
 
-use crate::style::{self, IconSet, ACCENT, FG, FG_DIM, FONT, FONT_SMALL, HOVER_BG, ICON_SIZE, MENU_SEL};
+use crate::style::{
+    self, IconSet, ACCENT, FG, FG_DIM, FONT, FONT_LABEL, FONT_SMALL, HOVER_BG, ICON_SIZE, MENU_SEL,
+};
 use crate::{Command, MenuKind};
 use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
 use x11rb::connection::Connection;
@@ -21,6 +23,8 @@ use x11rb::rust_connection::RustConnection;
 pub const BAR_H: u16 = 76;
 const MENU_W: u16 = 220;
 const MENU_ROW: f64 = 36.0;
+/// 弹层标题栏高度（官方 QWidget#widTitle + QLabel 14px 的组合）
+const MENU_HEAD: f64 = 38.0;
 
 /// Everything the bar needs to draw itself; rebuilt by the player loop.
 #[derive(Default, Clone, PartialEq)]
@@ -73,8 +77,9 @@ enum Btn {
     Episode,
     Fullscreen,
     More,
-    Close,
     Seek,
+    /// 弹层标题栏右侧的关闭叉
+    MenuClose,
     MenuItem,
 }
 
@@ -146,7 +151,7 @@ impl ControlBar {
         let menu_win = conn.generate_id().map_err(|e| e.to_string())?;
         let maux = CreateWindowAux::new()
             .override_redirect(1)
-            .background_pixel(0x1b1b1f)
+            .background_pixel(0x030405)
             .event_mask(mask);
         conn.create_window(
             depth,
@@ -276,14 +281,8 @@ impl ControlBar {
         };
         {
             let ctx = Context::new(&surface).unwrap_or_else(|_| panic!("cairo context"));
-            // 控制栏底色：官方是叠在视频上的深色条，QSS 未给值，取近黑
-            ctx.set_source_rgb(0.055, 0.055, 0.067);
-            ctx.rectangle(0.0, 0.0, w as f64, h as f64);
-            let _ = ctx.fill();
-            // 顶边分隔线 rgba(255,255,255,0.15)（同 QWidget#widButtons 的描边口径）
-            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.08);
-            ctx.rectangle(0.0, 0.0, w as f64, 1.0);
-            let _ = ctx.fill();
+            // 官方 QWidget#widControl：黑色渐变叠 #141620，不是一块纯色
+            style::draw_control_bg(&ctx, w as f64, h as f64);
 
             self.hits.clear();
             self.draw_seek(&ctx, snap, w);
@@ -374,9 +373,9 @@ impl ControlBar {
             self.text_a(ctx, &t, x, cy + FONT / 2.8, FONT_SMALL, FG_DIM);
         }
 
-        // 右簇（从右往左）：关闭 · 更多 · 全屏 · 音量 · | · 选集 · 音轨 · 字幕 · 倍速 · 清晰度
+        // 右簇（从右往左）：更多 · 全屏 · 音量 · | · 选集 · 音轨 · 字幕 · 倍速 · 清晰度
+        // 官方控制栏没有关闭按钮（关闭在标题栏），这里也不放
         let mut rx = w as f64 - 8.0;
-        rx = self.icon_right(ctx, rx, cy, Btn::Close, "close", "close_hover", None, true, 30.0);
         rx = self.icon_right(ctx, rx, cy, Btn::More, "more", "more_hover", None, true, ICON_SIZE);
         let (fs_k, fs_h) = if snap.fullscreen {
             ("exit_full", "exit_full_hover")
@@ -557,7 +556,7 @@ impl ControlBar {
         if items.is_empty() {
             return;
         }
-        let h = (items.len() as f64 * MENU_ROW + 12.0) as u16;
+        let h = (MENU_HEAD + items.len() as f64 * MENU_ROW + 8.0) as u16;
         let x = (self.abs_x + self.anchor_x - MENU_W as i16 / 2)
             .clamp(self.abs_x, self.abs_x + self.width as i16 - MENU_W as i16);
         let y = self.abs_y - h as i16 - 6;
@@ -585,7 +584,6 @@ impl ControlBar {
             Some(m) => (m.w as i32, m.h as i32, m.kind),
             None => return,
         };
-        let _ = kind;
         let mut surface = match ImageSurface::create(Format::ARgb32, mw, mh) {
             Ok(s) => s,
             Err(_) => return,
@@ -593,15 +591,50 @@ impl ControlBar {
         self.menu_hits.clear();
         {
             let ctx = Context::new(&surface).unwrap_or_else(|_| panic!("cairo context"));
-            ctx.set_source_rgb(0.106, 0.106, 0.122);
+            // 容器：官方 QWidget#widLiveBase —— rgba(0,0,0,0.85) 叠底、
+            // 8px 圆角、1px rgba(179,193,205,0.15) 描边
+            let bg = style::popup_bg();
+            ctx.set_source_rgb(bg.0, bg.1, bg.2);
             let _ = ctx.paint();
-            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.12);
             ctx.set_line_width(1.0);
-            style::rounded_rect(&ctx, 0.5, 0.5, mw as f64 - 1.0, mh as f64 - 1.0, 8.0);
+            ctx.set_source_rgba(
+                style::POPUP_BORDER.0,
+                style::POPUP_BORDER.1,
+                style::POPUP_BORDER.2,
+                style::POPUP_BORDER.3,
+            );
+            style::rounded_rect(&ctx, 0.5, 0.5, mw as f64 - 1.0, mh as f64 - 1.0, style::POPUP_RADIUS);
             let _ = ctx.stroke();
+
+            // 标题栏：官方 widTitle 是 14px 55% 白 + 底部 1px 分隔线
+            self.text_a(
+                &ctx,
+                menu_title(kind),
+                14.0,
+                MENU_HEAD / 2.0 + FONT_LABEL / 2.8,
+                FONT_LABEL,
+                style::LABEL,
+            );
+            ctx.set_source_rgba(
+                style::DIVIDER.0,
+                style::DIVIDER.1,
+                style::DIVIDER.2,
+                style::DIVIDER.3,
+            );
+            ctx.rectangle(1.0, MENU_HEAD, mw as f64 - 2.0, 1.0);
+            let _ = ctx.fill();
+            // 官方 popup 标题栏右侧有关闭叉（QPushButton#btnClose → popupClose2x.png）
+            self.icons
+                .draw_center(&ctx, "popup_close", mw as f64 - 20.0, MENU_HEAD / 2.0, 20.0);
+            self.menu_hits.push(Hit {
+                rect: ((mw - 32) as i16, 4, 28, (MENU_HEAD - 8.0) as i16),
+                btn: Btn::MenuClose,
+                index: 0,
+            });
+
             let items = self.menu.as_ref().map(|m| m.items.clone()).unwrap_or_default();
             for (i, (label, selected)) in items.iter().enumerate() {
-                let ty = 5.0 + i as f64 * MENU_ROW;
+                let ty = MENU_HEAD + 4.0 + i as f64 * MENU_ROW;
                 if *selected {
                     // 官方弹层项选中态：rgba(130,149,255,0.12) + border-radius 4
                     ctx.new_path();
@@ -617,7 +650,7 @@ impl ControlBar {
                     t.push('…');
                 }
                 // 官方弹层项 font-size 16px、padding-left 12px
-                self.text_a(&ctx, &t, 17.0, ty + MENU_ROW / 2.0 + FONT / 2.8, FONT, color);
+                self.text_a(&ctx, &t, 17.0, ty + (MENU_ROW - 4.0) / 2.0 + FONT / 2.8, FONT, color);
                 self.menu_hits.push(Hit {
                     rect: (5, ty as i16, (mw - 10) as i16, (MENU_ROW - 4.0) as i16),
                     btn: Btn::MenuItem,
@@ -639,7 +672,10 @@ impl ControlBar {
             for h in &self.menu_hits {
                 let (hx, hy, hw, hh) = h.rect;
                 if x >= hx && x <= hx + hw && y >= hy && y <= hy + hh {
-                    chosen = Some((menu.kind, h.index));
+                    // 关闭叉只关菜单，不选任何一项
+                    if h.btn != Btn::MenuClose {
+                        chosen = Some((menu.kind, h.index));
+                    }
                     break;
                 }
             }
@@ -779,8 +815,19 @@ fn map_btn(btn: Btn) -> Command {
         Btn::Next => Command::NextEpisode,
         Btn::Volume => Command::MuteToggle,
         Btn::Fullscreen => Command::ToggleFullscreen,
-        Btn::Close => Command::Quit,
         _ => Command::TogglePause,
+    }
+}
+
+/// 弹层标题（官方 popup 有独立标题栏，文字走 QLabel 14px 55% 白）
+fn menu_title(kind: MenuKind) -> &'static str {
+    match kind {
+        MenuKind::Speed => "播放速度",
+        MenuKind::Quality => "清晰度",
+        MenuKind::Audio => "音轨",
+        MenuKind::Subtitle => "字幕",
+        MenuKind::Episode => "选集",
+        MenuKind::More => "更多设置",
     }
 }
 

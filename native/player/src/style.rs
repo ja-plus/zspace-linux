@@ -15,7 +15,7 @@
 //! - `QWidget#widButtons { border-right: 1px solid rgba(255,255,255,0.15); }`
 //! - 弹层项 hover：`background: rgba(130,149,255,0.12); border-radius: 4px; font-size: 16px;`
 
-use cairo::{Context, ImageSurface};
+use cairo::{Context, ImageSurface, LinearGradient};
 use std::collections::HashMap;
 use std::io::Cursor;
 
@@ -32,10 +32,26 @@ pub const FG_DIM: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.65);
 /// 官方字号：控制栏正文与弹层项都是 16px
 pub const FONT: f64 = 16.0;
 pub const FONT_SMALL: f64 = 14.0;
+/// 说明性文字（官方 `QLabel { color: rgba(255,255,255,0.55); font-size: 14px; }`）
+pub const LABEL: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.55);
+pub const FONT_LABEL: f64 = 14.0;
 /// 弹层项 hover/选中的底色 rgba(130,149,255,0.12)
 pub const MENU_SEL: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
 /// 悬停态文字（官方 hover 不改色，靠图标提供反馈；文字按钮 hover 才有底色）
 pub const HOVER_BG: (f64, f64, f64, f64) = (0.510, 0.584, 1.0, 0.12);
+/// 分隔线 rgba(255,255,255,0.15)（widTitle / widDetail / widButtons 共用）
+pub const DIVIDER: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.15);
+
+/// `QWidget#widControl { background: linear-gradient(180deg, rgba(0,0,0,0) 0%,
+/// rgba(0,0,0,0.6) 55%, rgba(0,0,0,0.75) 100%), #141620; }`
+/// 底色 #141620
+pub const CONTROL_BASE: (f64, f64, f64) = (20.0 / 255.0, 22.0 / 255.0, 32.0 / 255.0);
+
+/// `QWidget#widLiveBase { background: rgba(0,0,0,0.85); border-radius: 8px;
+/// border: 1px solid rgba(179,193,205,0.15); }`
+/// 窗口本身不透明，0.85 的黑要预先混到 #141620 底上。
+pub const POPUP_RADIUS: f64 = 8.0;
+pub const POPUP_BORDER: (f64, f64, f64, f64) = (179.0 / 255.0, 193.0 / 255.0, 205.0 / 255.0, 0.15);
 
 /// 控制栏图标位：资源是 80x80 的 2x 图，按 40px 显示。
 pub const ICON_SIZE: f64 = 40.0;
@@ -82,6 +98,12 @@ icons![
     ("slider_handle", "controlbar/sliderbtn2x.png"),
     ("close", "titlebar/winClose2x.png"),
     ("close_hover", "titlebar/winCloseHover2x.png"),
+    // 弹层标题栏右侧的关闭叉。
+    // 官方用的是 popup/popupClose2x.png，但 popup 目录那一段的「块↔名字」
+    // 对齐还没校准（提取出来的 popupClose2x 实际是下箭头），
+    // 这里先改用已验证正确的标题栏关闭图。
+    ("popup_close", "titlebar/winClose2x.png"),
+    ("popup_close_hover", "titlebar/winCloseHover2x.png"),
 ];
 
 pub struct IconSet {
@@ -166,8 +188,39 @@ pub fn draw_seek(
     icons.draw_center(ctx, "slider_handle", left + w * frac, y + 2.0, 16.0);
 }
 
-pub fn rounded_rect(ctx: &Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
-    let r = r.min(w / 2.0).min(h / 2.0);
+/// 控制栏背景：官方是一条自上而下的黑色渐变叠在 `#141620` 上
+/// （0% 透明 → 55% 黑 0.6 → 100% 黑 0.75）。窗口没有 ARGB，
+/// 所以把「渐变叠底色」的合成结果直接算成三段实色。
+pub fn draw_control_bg(ctx: &Context, w: f64, h: f64) {
+    let mix = |a: f64| {
+        (
+            CONTROL_BASE.0 * (1.0 - a),
+            CONTROL_BASE.1 * (1.0 - a),
+            CONTROL_BASE.2 * (1.0 - a),
+        )
+    };
+    let canvas = h.max(1.0);
+    let g = LinearGradient::new(0.0, 0.0, 0.0, canvas);
+    let (t, m, b) = (mix(0.0), mix(0.6), mix(0.75));
+    g.add_color_stop_rgb(0.0, t.0, t.1, t.2);
+    g.add_color_stop_rgb(0.55, m.0, m.1, m.2);
+    g.add_color_stop_rgb(1.0, b.0, b.1, b.2);
+    let _ = ctx.set_source(&g);
+    ctx.rectangle(0.0, 0.0, w, canvas);
+    let _ = ctx.fill();
+}
+
+/// 弹层底色：官方 `rgba(0,0,0,0.85)` 落到不透明窗口上，
+/// 按叠在 `#141620` 上预先合成。
+pub fn popup_bg() -> (f64, f64, f64) {
+    (
+        CONTROL_BASE.0 * 0.15,
+        CONTROL_BASE.1 * 0.15,
+        CONTROL_BASE.2 * 0.15,
+    )
+}
+
+pub fn rounded_rect(ctx: &Context, x: f64, y: f64, w: f64, h: f64, r: f64) {    let r = r.min(w / 2.0).min(h / 2.0);
     ctx.new_sub_path();
     ctx.arc(x + w - r, y + r, r, -std::f64::consts::FRAC_PI_2, 0.0);
     ctx.arc(x + w - r, y + h - r, r, 0.0, std::f64::consts::FRAC_PI_2);

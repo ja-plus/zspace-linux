@@ -1613,3 +1613,83 @@
 
   且需要 `dangerouslyDisableSandbox`（脚本要写 build/ 并调 dpkg-deb）。
   全程约 1 分 51 秒。
+
+## 2026-11-18 播放器样式第二轮 + 全屏大修
+
+用户反馈四条：①整体样式还是不像 ②点开的二级菜单没对齐 ③全屏/非全屏按钮点了回不去
+④Windows 版右下角没有那个叉。
+
+**全屏（最关键，是真 bug 不是样式问题）**
+- 根因 1：`_NET_WM_STATE` 的 ClientMessage 发到了**自己的窗口 + EventMask::NO_EVENT**，
+  WM 根本收不到。只剩后面那句「configure 到屏幕尺寸」生效 → 用户看到的就是
+  「窗口变大了而已」，任务栏还在。EWMH 规定必须发到**根窗口**，
+  掩码 `SUBSTRUCTURE_REDIRECT | SUBSTRUCTURE_NOTIFY`。
+- 根因 2：退出全屏用的是「等 1.2 s，只有窗口还占满屏宽才强制改」。
+  WM 把窗口还原成别的尺寸（比如最大化）时不满足条件，窗口就永远回不去。
+  改成不等 WM、立刻还原 + 150 ms 间隔校验最多 4 次。
+- 根因 3：还原位置偏一个标题栏高度（48 px）。`configure_window` 和
+  `_NET_MOVERESIZE_WINDOW` 的坐标都是**外框**坐标，而 `xwininfo` 的
+  Absolute 是内容区坐标。要用 `_NET_FRAME_EXTENTS` 减掉 left/top。
+  **注意**：装饰尺寸必须在**进全屏前**读好——全屏期间 WM 把装饰去掉了，读回来是 0。
+- 根因 4：全屏后窗口没抬层级，任务栏/别的窗口仍压在上面。
+  进全屏后显式 `stack_mode(ABOVE)`。
+- 实测：`1280x720 @(207,178)` → `2160x1440 @(0,0)` + `_NET_WM_STATE_FULLSCREEN`
+  → 精确回到 `1280x720 @(207,178)`，F 键和点按钮各测两轮往返都一致。
+
+**样式**
+- `QWidget#widControl` 是**渐变遮罩**不是纯色：
+  `linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.6) 55%, rgba(0,0,0,0.75) 100%), #141620`。
+  窗口不透明，所以把叠加结果算成三段实色画。
+- 弹层：`QWidget#widLiveBase` = `rgba(0,0,0,0.85)` + 圆角 8 + 1px `rgba(179,193,205,0.15)`；
+  `QWidget#widTitle` 是 14px `rgba(255,255,255,0.55)` + 底边分隔线；
+  `QPushButton#btnClose` 用 `popup/popupClose2x.png`（标题栏右侧的叉）。
+  弹层高度 = 38（标题）+ N×36 + 8。
+- 删掉控制栏的关闭按钮（官方控制栏没有，关闭在标题栏/q 键），
+  连带删掉 `Btn::Close` 枚举与 map_btn 分支。
+
+**踩坑：popup 目录的图标映射是错的**
+- `popupClose2x.png` 提取出来是**下箭头**，`search2x.png` 是 14x8，
+  `successSlim2x` 是 600x300 —— `popup/` 这一段「数据块 ↔ 文件名」整体串位。
+- DP 已有「跳 2 个 qm 名 + 2 个孤儿块」的解，但**多个等价最优解**时它会随便挑，
+  串位就发生在挑错的位置。给「跳非 other 名字」加 6 分惩罚后 popup 段仍然不对，
+  说明这段的数据顺序确实和名字顺序不同序，不是惩罚项能救的。
+- 现状：弹层关闭叉改用已验证正确的 `titlebar/winClose2x.png`，
+  其余 popup 图标暂不使用。**做 ConfigPopup/字幕面板前必须先逐个核对这一段**
+  （方法：按原始比例导出、深色底、逐个看图，别用缩略图判断——
+  细长图标压成方形后完全看不出是什么）。
+- controlbar（块 164–232）和 titlebar 这两段已逐个核过，可以直接用。
+
+**验证**：`cargo test` 11/11；`selftest` 52/52（第一次跑出现一次
+「播放结束显示结束页」FAIL，日志里有 `get_buffer() failed`，
+是硬解偶发，重跑即过）；全屏 F 键/按钮各测两轮；弹层截图确认标题栏+叉+16px 项。
+
+## 2026-11-18 托盘右键菜单位置调查（未改代码）
+
+- 用户反馈：右键托盘图标，菜单在鼠标右下、贴屏幕底，期望"鼠标右上角展开"。
+- 结论：**这个菜单不是我们画的**。Linux 上 `tray.setContextMenu()` 把菜单交给
+  DDE（dde-shell 2.0.61 + dde-tray-loader 2.0.44）用 SNI/dbusmenu 渲染，
+  Electron（Linux）只能提供菜单内容，没有指定坐标的 API
+  （`popUpContextMenu` 的 position 只对 macOS/Windows 生效）。
+- 实测（本机 Deepin 25 / 2160x1440 / 会话 `:0`）：
+  - 右键托盘图标 → 菜单 (1408..1598, 1129..1269)，锚在图标 (1582,1300) 的左上方；
+    dock 越靠屏幕右下，菜单就越贴底，看起来像"触底"。
+  - 对照：右键 dock 空白处 → dock 自己的菜单 (1860..2090, 1178..1390)，
+    锚在光标 (1862,1420) 正上方 → 正确地在光标右上展开。
+  两条代码路径不同：Qt QMenu 会做避让翻转，dde-shell 的托盘 dbusmenu 菜单不会。
+  → 属 DDE 侧行为，应用层无法改（要改只能自绘菜单）。
+- 自绘菜单的前置未知：DDE 的 SNI 托盘会把右键拿去显示 dbusmenu，
+  Electron 大概率收不到 `right-click`（`.agents` 里 native.12 那条已记过）。
+  真要自绘需先验证"不 setContextMenu 时右键是否还有事件"。
+- SNI 自省：`chrome_status_icon_1` 的 `Menu=/com/canonical/dbusmenu`、
+  `ItemIsMenu=false`、`WindowId=0`、**没有 IconGeometry 属性**（libappindicator 不提供），
+  所以 host 也拿不到图标几何，只能按自己的 Qt item 坐标定位。
+- 副作用与修复：为实测右键点了托盘图标，应用中途退出并落到登录页；
+  已用 `~/.config/zspace/keep-login.json`（完整 store 快照）写回
+  `vuex.json` 的 `state`（并补 `user.loginInfo={keepLogin:true,remember:true}`）恢复登录，
+  备份在 `~/.config/zspace/vuex.json.bak-1795006248`。
+- 开发版跑法（迭代用，不用打 deb）：
+  `systemd-run --user --unit=zspace-dev --collect --setenv=DISPLAY=:0 native/run-native.sh`
+  （`systemctl --user stop zspace-dev` 停；直接 `nohup`/`&` 会被会话回收）。
+- 踩坑：`native/work/electron/dist/electron <任意路径>` 会因为
+  `resources/app` 软链接存在而仍然加载官方 app，**不能**用它跑自己的测试脚本；
+  且会被官方 app 当成"待上传文件"参数。

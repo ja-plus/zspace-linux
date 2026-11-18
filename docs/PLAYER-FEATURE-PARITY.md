@@ -73,6 +73,7 @@
 
 | 项 | 官方值 | QSS 出处 |
 |---|---|---|
+| 控制栏底色 | 黑色渐变叠 `#141620`（0% 透明 → 55% 黑 .6 → 100% 黑 .75） | `QWidget#widControl` |
 | 主色 | `#425FFF` | `QSlider::sub-page:horizontal` |
 | 进度轨道 | `rgba(255,255,255,0.15)` / 4px / 圆角 2 | `QSlider::groove:horizontal` |
 | 未播放余量 | `rgba(228,228,228,0.15)` | `QSlider::add-page:horizontal` |
@@ -81,11 +82,18 @@
 | 清晰度 | 文字按钮 16px / padding 8 | `QPushButton#btnFormat` |
 | 弹层项 | 16px / 选中 `rgba(130,149,255,0.12)` / 圆角 4 | 弹层 `QPushButton` |
 | 按钮组分隔 | 1px `rgba(255,255,255,0.15)` | `QWidget#widButtons` |
+| 弹层容器 | `rgba(0,0,0,0.85)` + 圆角 8 + 1px `rgba(179,193,205,0.15)` | `QWidget#widLiveBase` |
+| 弹层标题栏 | 14px `rgba(255,255,255,0.55)` + 底边分隔线 + 右侧关闭叉 | `QWidget#widTitle` / `QLabel` / `btnClose` |
 | 图标 | `controlbar/*.png`（80×80 2x，normal/Hover/Disable 三态） | `url(:/resource/...)` |
 
 **拿不到、仍未对齐的**：
 
-- 容器背景色与窗口圆角：QSS 未定义（Qt 自绘），且 override-redirect 窗口没有
-  ARGB visual，弹层的圆角只能画在内侧。
+- 弹层的**窗口形状**：圆角画在图片内侧，窗口本身还是矩形（override-redirect
+  没有 ARGB visual），四角外侧能看到一点底色。
 - 按钮精确坐标与间距：由 Qt layout 计算，QSS 里没有。
+- `popup/` 目录那一段的「数据块 ↔ 文件名」映射未校准
+  （`popupClose2x.png` 提取出来是下箭头），弹层关闭叉暂用标题栏的
+  `winClose2x.png`；做设置面板前要逐个核对这一段。
 - `ConfigPopup` 两列设置面板的排版：未逆向，属于功能缺口而不是样式缺口。
+
+**控制栏没有关闭按钮**：官方控制栏本来就没有，关闭走标题栏 / `q` / 关窗。

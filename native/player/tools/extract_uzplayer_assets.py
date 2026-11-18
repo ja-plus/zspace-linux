@@ -182,7 +182,10 @@ def align(blocks: list[tuple[int, int]], files: list[str], data: bytes) -> dict[
         for j in range(1, N + 1):
             pair = cost[i - 1][j - 1] + (0 if bkind[i - 1] == nkind[j - 1] else 4)
             sb = cost[i - 1][j] + 1
-            sn = cost[i][j - 1] + 1
+            # 跳名字：只有「无数据」的项才该被跳（这里是同一批 qm 的多语言变体）。
+            # 跳 png/svg 名字说明对齐跑偏了，给高代价把它挤掉，
+            # 否则 DP 会在一堆等价最优解里随便挑一个，导致图标串位。
+            sn = cost[i][j - 1] + (1 if nkind[j - 1] == "other" else 6)
             best = min(pair, sb, sn)
             cost[i][j] = best
             move[i][j] = "pair" if best == pair else ("skip_block" if best == sb else "skip_name")

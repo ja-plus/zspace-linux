@@ -190,12 +190,15 @@ seek / 切音轨 / 切字幕都先等服务端回复；超过 8 s 未回复或�
 
 | 元素 | 取值 | 出处 |
 |---|---|---|
+| 控制栏底色 | 黑色渐变叠 `#141620`：`0%` 透明 → `55%` 黑 0.6 → `100%` 黑 0.75 | `QWidget#widControl` |
 | 主色（进度已播放、选中） | `#425FFF` | `QSlider::sub-page:horizontal` |
 | 进度轨道 | `rgba(255,255,255,0.15)`，高 4px，圆角 2 | `QSlider::groove:horizontal` |
 | 未播放余量 | `rgba(228,228,228,0.15)` | `QSlider::add-page:horizontal` |
 | 进度滑块 | `sliderbtn2x.png`（官方图片滑块，不是画的圆点） | `:/resource/controlbar` |
 | 倍速 | 文字胶囊：底色 `rgba(255,255,255,0.15)`、圆角 8、16px、左右 padding 8 | `QPushButton#btnSpeed` |
 | 清晰度 | 纯文字按钮 16px，左右 padding 8 | `QPushButton#btnFormat` |
+| 弹层容器 | `rgba(0,0,0,0.85)` + 圆角 8 + 1px `rgba(179,193,205,0.15)` 描边 | `QWidget#widLiveBase` |
+| 弹层标题栏 | 14px `rgba(255,255,255,0.55)`，底边 1px `rgba(255,255,255,0.15)`，右侧关闭叉 | `QWidget#widTitle` + `QLabel` + `btnClose` |
 | 弹层项 | 16px，选中 `rgba(130,149,255,0.12)`、圆角 4 | 弹层 `QPushButton` 规则 |
 | 按钮组分隔线 | 1px `rgba(255,255,255,0.15)` | `QWidget#widButtons { border-right }` |
 
@@ -203,16 +206,21 @@ seek / 切音轨 / 切字幕都先等服务端回复；超过 8 s 未回复或�
 normal / Hover / Disable 三态齐全，鼠标悬停会切到 Hover 图
 （官方 Hover 图自带深色圆角底，所以悬停效果的底色是图片给的，不是画的）。
 
+**控制栏没有关闭按钮** —— 官方控制栏本来就没有，关闭在标题栏/`q` 键/关窗。
+`⋯` 右侧直接是最后一项。
+
 `assets/official.qss` 是 173 条 QSS 原文，`assets/icons/` 是 234 个原图，
 提取脚本和推导过程见 `tools/extract_uzplayer_assets.py` 与 `assets/README.md`。
 
 **仍未对齐的部分**（官方值拿不到或依赖 Qt 能力）：
 
-- 控制栏/弹层的**容器背景与圆角**：QSS 里没有，官方是 Qt Widget 自绘；
-  我们的弹层是 X11 override-redirect 矩形窗口，没有 ARGB visual，
-  所以圆角只能画在内侧，窗口本身还是方的。
+- 弹层的**窗口形状**：圆角是画在图片内侧的，X11 override-redirect 窗口本身
+  还是矩形（没有 ARGB visual），所以四角外侧能看到一点底色。
 - 按钮的精确 x 坐标与间距：官方由 Qt layout 计算，QSS 里没有，
   这里按 40px 图标位 + 2px 间距排。
+- `popup/` 目录那一段图标的「数据块 ↔ 文件名」映射还没校准
+  （提取出来的 `popupClose2x.png` 实际是下箭头），所以弹层关闭叉暂时用
+  已验证正确的标题栏 `winClose2x.png`。做设置面板时要先把这段逐个核对。
 - 官方 `ConfigPopup`（两列设置面板）的排版尚未逆向，属于功能缺口，见
   `docs/PLAYER-FEATURE-PARITY.md`。
 
@@ -242,11 +250,25 @@ normal / Hover / Disable 三态齐全，鼠标悬停会切到 Hover 图
 
 ### 4.2 全屏
 
-控制栏的全屏按钮、`F` 键、双击画面走同一条路径。进入全屏前会记住窗口几何，
-退出时先发 EWMH 取消全屏，1.2 s 后如果窗口还占满屏宽就强制改回原尺寸。
+控制栏的全屏按钮、`F` 键、双击画面走同一条路径，两个方向都做了实测。
 
-**已知限制**：DDE/treeland 不会把窗口挪回全屏前的位置（客户端 `configure x/y`
-对 reparenting WM 不生效），退出全屏后窗口停在左上角，尺寸是对的。
+进入：`_NET_WM_STATE_FULLSCREEN` 必须发到**根窗口**（掩码
+`SubstructureRedirect|SubstructureNotify`），WM 才会真正接管全屏。
+之前发到自己的窗口 + `NO_EVENT`，WM 根本收不到，只剩「把窗口改成屏幕尺寸」
+生效——表现就是**窗口变大盖不住任务栏**，看着不像全屏。现在 WM 接管后
+还会显式 `stack ABOVE` 抬一层（有的 WM 只改尺寸不抬层级）。
+300 ms 后如果窗口仍没铺满，才退化为自己 `configure` 到屏幕尺寸。
+
+退出：先发 EWMH 取消，**立刻**用 `_NET_MOVERESIZE_WINDOW` 请求还原，
+坐标是**根坐标**（`translate_coordinates` 取），并且要减掉
+`_NET_FRAME_EXTENTS` 里的装饰宽度——WM 的移动请求算的是外框坐标，
+不减就会差一个标题栏高度。装饰尺寸必须在**进全屏前**读好，全屏期间
+WM 会把装饰去掉，那时读回来是 0。之后按 150 ms 间隔校验最多 4 次，
+尺寸对上就收工。
+
+实测（2160×1440 屏）：`1280x720 @ (207,178)` → 全屏 `2160x1440 @ (0,0)`
+且 `_NET_WM_STATE_FULLSCREEN` 置位 → 退出精确回到 `1280x720 @ (207,178)`，
+连按两次往返都一致。
 
 ## 5. 键盘（控制栏之外仍全部保留）
 
