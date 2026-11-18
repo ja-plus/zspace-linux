@@ -302,7 +302,14 @@ if [ -n "$PAYLOAD_DIR" ]; then
     # 字体统一：渲染进程脚本随包 + 主进程注入点在位（西文不再落到 Times New Roman）
     expect A30 "字体修正脚本随包" test -s "$FILES_DIR/app/zs-fontfix.js"
     expect A31 "字体补丁已打" bash -c "[ \"\$(grep -oF 'zs-fontfix.js' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
-    expect A32 "字体注入挂在 dom-ready" bash -c "[ \"\$(grep -oF '\"dom-ready\"' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
+    # >=1：字体注入和笔记窗的「屏蔽页面右键处理器」都挂 dom-ready，不能假设只有一处
+    expect A32 "字体注入挂在 dom-ready" bash -c "[ \"\$(grep -oF '\"dom-ready\"' '$FILES_DIR/app/background.js' | wc -l)\" -ge 1 ]"
+    # 笔记窗：capture 阶段截断页面自己的 contextmenu（否则收起态小条会被页面切成三个图标）
+    expect A33 "笔记窗屏蔽页面右键处理器" bash -c "[ \"\$(grep -oF 'e.button&&e.stopPropagation()' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
+    # 笔记窗收起：尺寸+位置必须一次 setBounds 下发（分两步会被 WM 按旧宽度夹回屏幕内，
+    # 表现成「点开再关掉，小条往左跑」）。两个补丁各命中一次。
+    expect A34 "笔记窗收起用 setBounds" bash -c "[ \"\$(grep -oF 'Eo.setBounds({x:Math.ceil(e),y:Math.ceil(So.y),width:110,height:48},!1)' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
+    expect A35 "笔记窗展开用 setBounds" bash -c "[ \"\$(grep -oF 'Eo.setBounds({x:Math.ceil(So.x),y:Math.ceil(So.y),' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
 fi
 
 # B. 脚本与 control

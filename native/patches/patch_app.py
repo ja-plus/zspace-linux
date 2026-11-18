@@ -247,7 +247,7 @@ TRAY_PATCHES = [
      'if(!Eo)return;'
      'let b=Eo.getContentBounds(),p=i.screen.getCursorScreenPoint(),'
      'wa=i.screen.getDisplayNearestPoint(p).workArea,'
-     'sx=Math.min(p.x+2,wa.x+wa.width-200),sy=Math.min(p.y+2,wa.y+wa.height-150),'
+     'sx=p.x+2,sy=Math.min(p.y+2,wa.y+wa.height-110),'
      'mx=sx-b.x,my=sy-b.y,t0=Date.now(),cs=!!So.collapse;'
      'global.__memoMenuOpen=!0;'
      'Ao.popup({window:Eo,x:mx,y:my,callback:()=>{'
@@ -272,12 +272,47 @@ TRAY_PATCHES = [
     # 「复制/粘贴/…/检查元素」的 Chromium 式菜单。笔记窗是透明无边框的悬浮小窗，
     # 这条菜单既没用，又会和我们自己的菜单抢 popup grab —— 用户看到的就是
     # 「闪一下『检查元素』然后消失」。摘掉它，笔记窗只剩我们这一条。
+    #
+    # 再注入一条 capture 阶段的 stopPropagation：官方页面自己的 contextmenu 处理器
+    # 一收到右键就把收起态的小条内容换成「展开/钉住/关闭」三个图标按钮（用户截图里
+    # 那个样子）。我们只要弹自己的菜单，不需要页面切这个工具条。
+    # 注意：**不能 preventDefault** —— 实测页面 preventDefault 之后，主进程的
+    # webContents 'context-menu' 事件就不再触发（我们自己就是靠它兜底的），
+    # 只 stopPropagation 则不影响（已用最小页面验证：页面处理器不执行、主进程照常收到）。
     ("memo-context-menu",
      'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),Io()}',
      'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),'
      'Eo.webContents.removeAllListeners("context-menu"),'
+     'Eo.webContents.on("dom-ready",()=>{try{Eo.webContents.executeJavaScript('
+     '"(()=>{const s=e=>{2===e.button&&e.stopPropagation()};'
+     '[\\"mousedown\\",\\"mouseup\\",\\"pointerdown\\",\\"pointerup\\",\\"contextmenu\\"]'
+     '.forEach(t=>window.addEventListener(t,s,!0))})()",!0),'
+     'r.a.info("[memo] page right-button events muted")}catch(x){'
+     'r.a.info("[memo] mute failed: "+x.message)}}),'
      'Eo.webContents.on("context-menu",()=>{'
      'r.a.info("[memo] webContents context-menu"),ko("rightclick")}),Io()}'),
+    # 快捷笔记是「桌面悬浮小窗」，不该在 Dock / 任务栏里占一个位置。
+    #
+    # 官方代码里其实已经调了 `Eo.setSkipTaskbar(!0)`，但 **Electron 的
+    # setSkipTaskbar 只在 Windows/macOS 有实现，Linux 是空操作**。实测（本机
+    # DDE/kwin_x11，Electron 33.3.1）：窗口创建后立刻 / ready-to-show / 延迟
+    # 1.5 s 三种时机调用，窗口的 `_NET_WM_STATE` 里始终没有
+    # `_NET_WM_STATE_SKIP_TASKBAR`（只有 alwaysOnTop 带来的 ABOVE/STAYS_ON_TOP）。
+    #
+    # 换个路子：dde-shell 的 dock 任务栏（org.deepin.ds.dock.taskmanager）是按
+    # `_NET_WM_WINDOW_TYPE` 过滤窗口的 —— 那个 .so 里带着 TOOLBAR / UTILITY /
+    # MENU / SPLASH / NOTIFICATION 一串 atom，非 NORMAL 的窗口不进任务栏。
+    # 所以把笔记窗的窗口类型改成 `utility`（Electron 在 Linux 支持，落在
+    # `_NET_WM_WINDOW_TYPE_UTILITY`）：
+    #   · 实测 dock 里图标下的小短横线不再多一条（普通窗口会多一条）；
+    #   · 窗口仍能正常拿焦点输入（xdotool windowactivate → focus 事件到位，
+    #     document.hasFocus() 为 true），alwaysOnTop / 无边框 / 透明都不受影响；
+    #   · Alt-Tab 里也不再列它，符合「悬浮笔记」的语义。
+    # 非 Linux 平台传 undefined，等于不传，行为与官方一致。
+    ("memo-utility-window",
+     'Eo=new i.BrowserWindow({x:t,y:n,width:a,height:c,',
+     'Eo=new i.BrowserWindow({x:t,y:n,width:a,height:c,'
+     'type:"linux"==process.platform?"utility":void 0,'),
     # 页面的 mouseup 会在右键菜单弹出前后自己发 collapse/expand，
     # 结果"右键 = 左键折叠/展开"。菜单开着时一律丢弃，菜单关掉后 1.2 s 内也丢弃
     # （页面会在失焦后隔一两秒才补发 collapse，800 ms 的窗口挡不住）。
@@ -288,6 +323,35 @@ TRAY_PATCHES = [
      '(global.__memoMenuOpen||Date.now()-(global.__memoMenuAt||0)<1200)'
      '?(r.a.info("[memo] drop page toggle after right-click: "+e),!0)'
      ':"hide"==e?'),
+    # 收起/展开笔记窗：setPosition 和 setSize 分两步做，会被 WM 按**旧尺寸**夹回屏幕内。
+    #
+    # 官方 Po() 的顺序是 `setPosition(右对齐 x)` → `setSize(110,48)`。执行 setPosition
+    # 时窗口还是展开态的 368 宽：笔记窗默认靠右，x=1238，1238+368=1606 > 1440，
+    # Chromium/X11 的 keep-on-screen 把 x 夹成 1072（= 屏幕宽 1440 − 368），随后
+    # setSize 缩到 110，位置就停在 1072 —— 用户看到的就是「点开笔记、再关掉，
+    # 小条往左挪了一截」。日志里 `update meo pos: {x:1072,...}` 就是这一步。
+    # 用 stock Electron 33.3.1 + kwin_x11 单窗口最小验证（368x428 @976,100）：
+    #   expand     {x:976,w:368}
+    #   old-order  {x:1072,w:110}   ← setPosition 后再 setSize
+    #   new-order  {x:1238,w:110}   ← setBounds 一次给尺寸+位置
+    # 所以把两步合成一次 setBounds（X11 上走 _NET_MOVERESIZE_WINDOW，WM 按新尺寸算位置）。
+    # 展开（Lo）同理：先 setSize 到 368 时窗口还停在靠右的位置，也可能被夹一下再被
+    # setPosition 拉回，视觉上闪一帧，一并合成 setBounds。
+    ("memo-collapse-bounds",
+     'So.collapse=!0,Eo.setMinimumSize(110,48);let e=So.x+So.width-106;'
+     'Eo.setPosition(Math.ceil(e),Math.ceil(So.y),!1),'
+     'Eo.setSize(Math.ceil(110),Math.ceil(48),!1),'
+     'setTimeout(()=>{Eo.setResizable(!1)},20)',
+     'So.collapse=!0,Eo.setMinimumSize(110,48);let e=So.x+So.width-106;'
+     'Eo.setBounds({x:Math.ceil(e),y:Math.ceil(So.y),width:110,height:48},!1),'
+     'setTimeout(()=>{Eo.setResizable(!1)},20)'),
+    ("memo-expand-bounds",
+     'So.width=Math.max(368,So.width),So.height=Math.max(428,So.height),'
+     'Eo.setSize(Math.ceil(So.width),Math.ceil(So.height),!1),'
+     'Eo.setPosition(Math.ceil(So.x),Math.ceil(So.y),!1)',
+     'So.width=Math.max(368,So.width),So.height=Math.max(428,So.height),'
+     'Eo.setBounds({x:Math.ceil(So.x),y:Math.ceil(So.y),'
+     'width:Math.ceil(So.width),height:Math.ceil(So.height)},!1)'),
     # 同一个问题还有一处：登录提示弹窗（showPopUpIfNeeded）也用 getBounds()。
     # 一起改成 Linux 用光标锚定。
     ("tray-login-popup-pos",
@@ -375,6 +439,10 @@ LEGACY = {
         'TRAY_NEW',
     )],
     'memo-rightclick-popup': [(
+        # native.20：横向还留着 200 px 固定边距，贴屏幕右侧时会把菜单往左拽
+        '"rightclick"==e?(No=null,(()=>{try{if(!Eo){r.a.info("[memo] no memo window");return}if(Date.now()-(global.__memoMenuAt||0)<400){r.a.info("[memo] skip duplicate right-click");return}global.__memoMenuAt=Date.now();setTimeout(()=>{try{if(!Eo)return;let b=Eo.getContentBounds(),p=i.screen.getCursorScreenPoint(),wa=i.screen.getDisplayNearestPoint(p).workArea,sx=Math.min(p.x+2,wa.x+wa.width-200),sy=Math.min(p.y+2,wa.y+wa.height-150),mx=sx-b.x,my=sy-b.y,t0=Date.now(),cs=!!So.collapse;global.__memoMenuOpen=!0;Ao.popup({window:Eo,x:mx,y:my,callback:()=>{global.__memoMenuOpen=!1,global.__memoMenuAt=Date.now();r.a.info("[memo] menu closed after "+(Date.now()-t0)+"ms");(()=>{let n=0,iv=setInterval(()=>{if(!Eo||Eo.isDestroyed()||!So.show||++n>17){clearInterval(iv);return}if(!!So.collapse!==cs){clearInterval(iv),r.a.info("[memo] revert collapse="+cs+" (page collapsed after menu)"),cs?Po():Lo()}},300)})()}}),r.a.info("[memo] menu popped at "+sx+","+sy+" win="+b.width+"x"+b.height)}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}},120)}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}})())',
+        'MEMO_NEW',
+    ), (
         # native.17 线上文本：坐标往窗口里夹（小窗时菜单贴到左下角）+ 不还原折叠态
         '"rightclick"==e?(No=null,(()=>{try{if(!Eo){r.a.info("[memo] no memo window");return}'
         'if(Date.now()-(global.__memoMenuAt||0)<400){r.a.info("[memo] skip duplicate right-click");return}'
@@ -432,6 +500,17 @@ LEGACY = {
         'MEMO_NEW',
     )],
     'memo-context-menu': [(
+        # native.19：只屏蔽了 contextmenu，页面其实是靠 mousedown(button=2) 切工具条
+        'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),Eo.webContents.removeAllListeners("context-menu"),Eo.webContents.on("dom-ready",()=>{try{Eo.webContents.executeJavaScript("window.addEventListener(\\"contextmenu\\",e=>e.stopPropagation(),!0)",!0),r.a.info("[memo] page contextmenu handler muted")}catch(x){r.a.info("[memo] mute failed: "+x.message)}}),Eo.webContents.on("context-menu",()=>{r.a.info("[memo] webContents context-menu"),ko("rightclick")}),Io()}',
+        'CTX_NEW',
+    ), (
+        # native.18：摘掉了官方菜单，但没屏蔽页面自己的 contextmenu 处理器
+        'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),'
+        'Eo.webContents.removeAllListeners("context-menu"),'
+        'Eo.webContents.on("context-menu",()=>{'
+        'r.a.info("[memo] webContents context-menu"),ko("rightclick")}),Io()}',
+        'CTX_NEW',
+    ), (
         # native.14 / native.15：只挂了自己的兜底监听，没摘掉 electron-context-menu
         'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),'
         'Eo.webContents.on("context-menu",()=>{'

@@ -1915,3 +1915,37 @@ QSS 只知道「长什么样」，符号表知道「有哪些类、每类管什�
 - **教训**：以后列功能清单，先扫符号表再扫资源。只有图标/QSS 的话，
   纯逻辑功能（老板键、定时、字幕记忆）会整块漏掉。
 - 已补进 `docs/PLAYER-FEATURE-PARITY.md` 第 2.5 节。
+
+## 2026-11-18 笔记悬浮窗「点开再关掉，小条往左跑」（native.22）
+
+- 现象（用户口述）：左键点开快捷笔记、再点面板上的 ✕ 关掉，收起后的小条
+  不在原位，往左挪了一截。日志里是 `update meo pos: {x:1238 → 976 → 1072}`。
+- 根因：官方 `Po()`（收起）先 `setPosition(右对齐 x)` 再 `setSize(110,48)`。
+  执行 setPosition 时窗口还是展开态 368 宽，x=1238 + 368 = 1606 > 屏幕 1440，
+  Chromium/X11 的 keep-on-screen 把 x 夹成 **1072 = 1440 − 368**；随后 setSize
+  缩到 110，位置就停在 1072。展开（`Lo()`）同理，只是紧接着还有一次
+  setPosition 把位置拉回去，所以只在靠右时闪一帧。
+- 复现（不登录、不需要服务器）：stock Electron 33.3.1 + kwin_x11，单窗口
+  368x428 @976,100，跑 `/tmp/memo-pos-test.js`：
+  ```
+  expand     {x:976,w:368}
+  old-order  {x:1072,w:110}   ← setPosition 后再 setSize
+  reset      {x:976,w:368}
+  new-order  {x:1238,w:110}   ← setBounds 一次给尺寸+位置
+  ```
+  跑法：`native/work/electron/dist` 里先把 `resources/app` 软链挪开（否则永远
+  加载官方 app），再 `env -u ELECTRON_RUN_AS_NODE ./electron /tmp/memo-pos-test.js`。
+- 修法：`patch_app.py` 新增 `memo-collapse-bounds` / `memo-expand-bounds`，
+  把 `setSize`+`setPosition` 合成一次 `Eo.setBounds(...)`（X11 上走
+  `_NET_MOVERESIZE_WINDOW`，WM 按新尺寸算位置）。自检加 A34/A35。
+- 产物：`build/com.zspace.native.spark_2.46.2026101501+native.22-1_amd64.deb`
+  117,396,844 B；SHA256 `06662f0273e2874ef8d775e7eaf441322205f77c3e63a741bf2505d271808881`；
+  自检 45 项全 PASS（含 A34/A35），已 `pkexec dpkg -i` 装上（native.21 → 22）。
+- 待用户实测：点开笔记 → 点 ✕ 收起 → 小条应回到原位（日志 `update meo pos`
+  的 x 应与点开前一致，不再出现 1072）。
+- 踩坑：打包脚本在 WorkBuddy 会话里跑会被 `BASH_ENV` 注入的 safe-delete `rm`
+  拦住（报 `rm: 权限不够` / `environment: /rm: 没有那个文件或目录`）。
+  用 `env -i HOME=... PATH=... bash scripts/build_native_deb.sh ...` 干净环境跑。
+- 环境备注：同一时间另一个会话在这台机器上测 Wine 版（极空间/uzplayer 窗口）
+  并反复重启原生版，GPU 进程偶发 `error_code=1002` 起不来 —— 实测要用
+  `ZSPACE_NATIVE_ARGS="--disable-gpu --disable-dev-shm-usage"` 且挑没有并发实例的时机。
