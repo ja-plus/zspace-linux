@@ -299,6 +299,10 @@ if [ -n "$PAYLOAD_DIR" ]; then
     expect A27 "mount 补丁已打" grep -q 'MountMoni' "$FILES_DIR/app/background.js"
     expect A28 "无 Windows mount/sync 产物" bash -c "! dpkg-deb -c '$DEB' | grep -Eiq 'winfsp|mounts3|ZSpaceMount\\.exe|ZSpaceSync\\.exe|\\.msi|fuse-t'"
     expect A29 "挂载 filter.txt 随包" test -s "$FILES_DIR/app/bin/filter.txt"
+    # 字体统一：渲染进程脚本随包 + 主进程注入点在位（西文不再落到 Times New Roman）
+    expect A30 "字体修正脚本随包" test -s "$FILES_DIR/app/zs-fontfix.js"
+    expect A31 "字体补丁已打" bash -c "[ \"\$(grep -oF 'zs-fontfix.js' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
+    expect A32 "字体注入挂在 dom-ready" bash -c "[ \"\$(grep -oF '\"dom-ready\"' '$FILES_DIR/app/background.js' | wc -l)\" = 1 ]"
 fi
 
 # B. 脚本与 control
