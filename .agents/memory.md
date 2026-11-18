@@ -1693,3 +1693,75 @@
 - 踩坑：`native/work/electron/dist/electron <任意路径>` 会因为
   `resources/app` 软链接存在而仍然加载官方 app，**不能**用它跑自己的测试脚本；
   且会被官方 app 当成"待上传文件"参数。
+
+## 2026-11-18 西文衬线体修复（native.16 · 字体统一）
+
+- 现象：原生版主界面上中文是黑体，西文（`ydkn_cups`、`Docker`、CPU/RAM 百分比、
+  弹层里的数字）却是 Times New Roman 那种衬线体，一屏两种字型。
+- 根因（CDP `CSS.getPlatformFontsForNode` 直读，别再猜）：
+  NAS 页面把根节点写成了**全角逗号**的 inline 声明
+  `<div id="app" style='font-family: "Microsoft YaHei，Arial，Verdana，sans-serif";'>`
+  —— 整串被 Chromium 当成**一个**字体名，必然找不到，于是
+  西文落到 UA 默认字体 `Times New Roman`（衬线），中文落到回退 `Source Han Sans SC`。
+  实测该页有 9+ 个元素（`.devName`/`.task_tag`/`.appName`/弹层文字…）走这条路径；
+  登录页因为它自己的栈是 `menu, PingFangSC-Medium, …` 反而正常。
+  Windows/Wine 的 UA 默认字体是无衬线的，所以官方与 Wine 版都没暴露这个问题。
+- 修法（`native/patches/fontfix.js` + `patch_app.py` 的 `FONT_PATCHES`）：
+  主进程在 `web-contents-created` 上挂 `dom-ready`，把脚本 `executeJavaScript`
+  注入每个 webContents；脚本做两件事 ——
+  1) 给 `<html>` 打统一栈（`Microsoft YaHei` → Noto/Source Han Sans → Arial → sans-serif），
+     继承来的文字不再落到衬线体；
+  2) 把**含全角逗号**的 inline `font-family` 就地改写成同一栈（`!important`），
+     MutationObserver 兜住 Vue 后插入/重写的节点。
+  只改 font-family；图标字体元素不含全角逗号，不会被命中（实测图标正常）。
+- 验证（开发版 + CDP，`run-native.sh --remote-debugging-port=9222`）：
+  `window.__zsFontFix=1`；`#app`/`html` 字体栈已换；残留全角逗号 0；
+  `.devName/.task_tag/.task_num/.appName` 的平台字体由 `Times New Roman` → `Microsoft YaHei`；
+  全页「衬线元素」计数 0；截图对比 ydkn_cups / dyr-config-mgr-node 已是无衬线。
+- 产物 native.16：`build/com.zspace.native.spark_2.46.2026101501+native.16-1_amd64.deb`
+  117,406,716 B；SHA256 `c86d30ccb99f2b6c63340703f35b3584b37839cb4b9f8b19b679583d741fda22`；
+  自检 54 项全 PASS（新增 A30 字体脚本随包 / A31 补丁已打 / A32 注入挂 dom-ready）。
+- 注意（未提交）：`patch_app.py` 工作区里还有上一轮留下的「快捷笔记右键」WIP
+  （把 `Ao.popup` 改成 `r.a.info` + 摘掉 electron-context-menu 的 inspect），
+  **没有**打进 native.16、也没验证过；下次重建前先决定它的去留。
+
+## 2026-11-18 快捷笔记右键「闪一下检查元素就消失」（native.17 · 真因）
+
+- 现象：悬浮笔记窗右键 → 先闪一个菜单，内容是**检查元素**，随即消失；应用自己的
+  「隐藏悬浮窗 / 打开记事本」菜单看不到（或一闪而过）。
+- 真因（两条，缺一不可）：
+  1. **官方给每个窗口都挂了 `electron-context-menu`**：`Pu({... labels.inspect:"检查元素"})`
+     在启动时调用，库内部 `app.on("browser-window-created")` 给所有 webContents 挂
+     context-menu 监听，笔记小窗也在内。官方那条先弹（Chromium 式复制/粘贴/检查元素），
+     我们延迟 120 ms 再弹把它的 grab 顶掉 —— 用户看到的就是「检查元素闪一下」。
+     靠 `grep -o "showInspectElement"` 是找不到的（默认值来自 `electron-is-dev`），
+     要看 `labels:{inspect:"检查元素"}` 这个调用点。
+  2. **popup 期间 `setAlwaysOnTop(!1)` 是错的**：DDE/X11 上 override-redirect 的 GTK
+     菜单本来就在置顶窗之上（实测），而改置顶标记会触发 WM 重新堆叠；堆叠发生在菜单
+     map 之后 → 菜单刚出来就被撤掉，就是「瞬间消失」。别再动 alwaysOnTop。
+- 修法（`patch_app.py`，两条都改了，各带 LEGACY 升级）：
+  - `memo-context-menu`：`Eo.webContents.removeAllListeners("context-menu")` 之后再挂
+    自己的兜底监听 → 笔记窗只剩一条，不再有官方菜单抢 grab。
+  - `memo-rightclick-popup`：去掉 setAlwaysOnTop，保留 400 ms 去抖 + 120 ms 延迟
+    （等右键 mouseup 松手，否则 release 会点到菜单第一项），日志统一走 `r.a.info`
+    （进 `~/.config/zspace/logs/main.log`，`console.log` 只在终端可见，踩过一次）。
+- 验证方法（不用登录、可重复）：拿 stock Electron 33.3.1 跑一个最小复现窗
+  （transparent + frame:false + alwaysOnTop + electron-context-menu 用官方 node_modules），
+  `ffmpeg -f x11grab -framerate 25` 录屏 + 抽帧比对：
+  - `alwaysOnTop` 一改，菜单 ~200 ms 内消失（复现 2）；
+  - `removeAllListeners` 后只剩我们一条菜单，2 s 后仍在屏上（复现 1 修好）。
+  注意：`native/work/electron/dist/electron` 因 `resources/app` 存在**永远加载官方 app**，
+  跑测试脚本要另拷一份 dist 并删掉 `resources/app`。
+- 产物 `native.17`：`build/com.zspace.native.spark_2.46.2026101501+native.17-1_amd64.deb`
+  117,406,424 B；SHA256 `3adcc929488f3d0d64ad43efd1e518ca72836ab102698c2f3f88275aa5e0a9be`；
+  自检 54 项全 PASS。**本包同时含上一节的全角逗号字体修复**（A30/A31/A32 通过）。
+- 记账修正：字体修复那一轮的 native.16 deb 被这一轮同名构建覆盖过（当时没有 rsync 保护），
+  已删掉那个 SHA 对不上的文件，改用 native.17 交付；`dpkg -l` 当时装的是 native.15，
+  所以没有用户手上的包被换掉。
+- 踩坑：`dpkg-deb --build` 把 deb **写进 `build/`** 时 tar 会成片报
+  `无法 stat: 没有那个文件或目录`（写到 /tmp 就正常，推测是本机沙箱对工作区大文件写入的
+  干扰）；先用 `--out /tmp/xxx` 打包，再 `cp` 回 `build/`。顺带：`pkill -f "xxx/main.js"`
+  会连自己的 shell 一起杀掉，用 `pkill -f '^/tmp/el/electron'` 这种带锚点的写法。
+- 待用户实测：装 native.17 → 登录 → 唤起快捷笔记 → 右键应稳定停在
+  「隐藏悬浮窗 / 打开记事本」，不再出现「检查元素」；日志里应看到
+  `[memo] menu popped at ...` 且 `menu closed after` 是用户点掉/点外时才出现。

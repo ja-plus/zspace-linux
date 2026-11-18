@@ -20,6 +20,8 @@ Usage:
   8. Install syncthing into bin/syncthing (0755).
   9. Install zspace-mount-monitor as bin/ZSpaceMountMonitor, rclone as
      bin/ZSpaceMount, and the official filter.txt into bin/filter.txt.
+ 10. Install zs-fontfix.js next to background.js and inject it into every
+     webContents on dom-ready (unify the serif Latin fallback, see FONT_PATCHES).
 
 Idempotent. Validates JS syntax before writing when a JS engine is available
 (`ZS_NODE` env, or `node` in PATH; the Electron binary works with
@@ -207,52 +209,59 @@ TRAY_PATCHES = [
      'if(n-(this.__lc||0)<400){this.__lc=0,o=!0,'
      'console.log("[tray] double-click -> show app"),c()}else this.__lc=n})(),'
      'o=!1,'),
-    # 快捷笔记: the page sends "rightclick" on mousedown; main pops a native menu.
-    # Two Linux problems: (1) the memo window is alwaysOnTop, so the menu is
-    # drawn *behind* it and never visible — drop the flag while the menu is
-    # open and restore it in the popup callback; (2) do NOT defer the popup:
-    # deferring lets the page's mouseup run its "expand" toggle, which is the
-    # reported "right-click behaves like left-click".
+    # 快捷笔记右键：只要「弹一个菜单」，别再动置顶标记。
+    #
+    # 排查结论（native.16）：
+    # 1) 菜单里出现「检查元素」不是我们这一路弹的 —— 官方把 electron-context-menu
+    #    全局挂在了每个窗口上（Pu(...) 里 labels.inspect="检查元素"），笔记窗也在
+    #    名单里。两个菜单在同一时刻抢同一个 GTK popup grab：官方的先弹，我们延迟
+    #    120 ms 再弹把它顶掉，于是用户看到「闪一下『检查元素』」。
+    #    见下面 memo-context-menu：直接在笔记窗上摘掉官方那条监听。
+    # 2) 之前为了「菜单被置顶窗口盖住」去 setAlwaysOnTop(!1)，是错的：DDE/X11 上
+    #    override-redirect 的 GTK 菜单本来就在置顶窗之上（实测），而改置顶标记会
+    #    触发 WM 重新堆叠，堆叠发生在菜单 map 之后 → 菜单刚出来就被撤掉，表现成
+    #    「一瞬间就消失」。所以这里不再碰 alwaysOnTop。
+    # 3) 仍然显式带 window:Eo + x/y：不带 window 时 Electron 用「当前聚焦窗口」，
+    #    笔记窗在非激活态下可能没有焦点，菜单不弹或弹到别的窗口；不带 x/y 会落到
+    #    屏幕左上角。
     ("memo-rightclick-popup",
      '"rightclick"==e?(No=null,Ao.popup({window:Eo}))',
-     # 三个 Linux 问题一起处理：
-     # 1) 悬浮笔记窗口始终置顶，菜单会被它盖住 → popup 期间临时取消置顶；
-     # 2) popup 必须显式带上 window:Eo —— 只给 callback 时 Electron 用"当前聚焦
-     #    窗口"，而笔记窗在小窗/非激活状态下可能没有焦点，菜单就不弹或弹错窗口；
-     # 3) 给 x/y（窗口内容坐标，夹在窗口范围内）让菜单贴着鼠标出现，
-     #    否则它会落到屏幕左上角。
      '"rightclick"==e?(No=null,(()=>{try{'
-     'if(!Eo){console.log("[memo] no memo window");return}'
+     'if(!Eo){r.a.info("[memo] no memo window");return}'
      # context-menu 事件和页面自己发的 "rightclick" 都会走到这里，400 ms 内只认第一次
      'if(Date.now()-(global.__memoMenuAt||0)<400){'
-     'console.log("[memo] skip duplicate right-click");return}'
+     'r.a.info("[memo] skip duplicate right-click");return}'
      # 记下右键时间：页面自己的 mouseup 会在菜单弹出前后发 collapse/expand，
      # ko() 里据此把这段时间内的折叠/展开丢掉，否则表现成"右键跟左键一样"。
      'global.__memoMenuAt=Date.now();'
-     'let w=Eo.isAlwaysOnTop();'
-     'Eo.setAlwaysOnTop(!1);'
-     # 置顶标记是 WM 属性，X11/XWayland 下都不是同步生效；立刻 popup 会在
-     # 标记生效前就 map 出来，于是菜单仍被笔记窗盖住。让出 120 ms 再弹。
+     # 让出 120 ms：右键的 mouseup 一般 30~80 ms 就到，太早弹菜单会被 release 立刻
+     # 当成「点了第一项」。不涉及置顶/堆叠，纯粹等按键松手。
      'setTimeout(()=>{try{'
      'if(!Eo)return;'
      'let b=Eo.getContentBounds(),p=i.screen.getCursorScreenPoint(),'
      'mx=Math.max(0,Math.min(p.x-b.x,b.width-180)),'
-     'my=Math.max(0,Math.min(p.y-b.y,b.height-16));'
-     'Ao.popup({window:Eo,x:mx,y:my,callback:()=>{Eo&&w&&Eo.setAlwaysOnTop(!0)}}),'
-     'console.log("[memo] menu popped at "+mx+","+my+" wasOnTop="+w)'
-     '}catch(x){console.log("[memo] menu popup failed: "+x.message),'
-     'Eo&&w&&Eo.setAlwaysOnTop(!0)}},120)'
-     '}catch(x){console.log("[memo] menu popup failed: "+x.message),'
-     'Eo&&Eo.setAlwaysOnTop(!0)}})())'),
+     'my=Math.max(0,Math.min(p.y-b.y,b.height-16)),'
+     't0=Date.now();'
+     'Ao.popup({window:Eo,x:mx,y:my,callback:()=>{'
+     'r.a.info("[memo] menu closed after "+(Date.now()-t0)+"ms")}}),'
+     'r.a.info("[memo] menu popped at "+mx+","+my+" win="+b.width+"x"+b.height)'
+     '}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}},120)'
+     '}catch(x){r.a.info("[memo] menu popup failed: "+x.message)}})())'),
     # 页面是 NAS 上的 /home/notebookMemo，右键是否发 "rightclick" 由服务端页面决定；
     # 万一它在这版里不发（或只在 win/darwin 发），主进程就永远收不到，右键就退化成
-    # 页面自己的折叠/展开。这里直接挂 webContents 的 context-menu 事件当兜底：
-    # 只要真的右键了就会触发，和页面实现无关。
+    # 页面自己的折叠/展开。这里直接挂 webContents 的 context-menu 事件当兜底。
+    #
+    # 关键：先 removeAllListeners。官方在启动时调了 electron-context-menu（Pu），
+    # 它给每个新建窗口的 webContents 都挂了一条 context-menu 监听，弹的是
+    # 「复制/粘贴/…/检查元素」的 Chromium 式菜单。笔记窗是透明无边框的悬浮小窗，
+    # 这条菜单既没用，又会和我们自己的菜单抢 popup grab —— 用户看到的就是
+    # 「闪一下『检查元素』然后消失」。摘掉它，笔记窗只剩我们这一条。
     ("memo-context-menu",
      'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),Io()}',
      'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),'
+     'Eo.webContents.removeAllListeners("context-menu"),'
      'Eo.webContents.on("context-menu",()=>{'
-     'console.log("[memo] webContents context-menu"),ko("rightclick")}),Io()}'),
+     'r.a.info("[memo] webContents context-menu"),ko("rightclick")}),Io()}'),
     # 页面的 mouseup 会在右键菜单弹出前后自己发 collapse/expand，
     # 结果"右键 = 左键折叠/展开"。右键后 800 ms 内的折叠/展开直接丢弃。
     ("memo-suppress-toggle",
@@ -348,6 +357,22 @@ LEGACY = {
         'TRAY_NEW',
     )],
     'memo-rightclick-popup': [(
+        # native.14 / native.15 线上文本：popup 期间关置顶 + 用 console.log
+        '"rightclick"==e?(No=null,(()=>{try{if(!Eo){console.log("[memo] no memo window");return}'
+        'if(Date.now()-(global.__memoMenuAt||0)<400){console.log("[memo] skip duplicate right-click");return}'
+        'global.__memoMenuAt=Date.now();let w=Eo.isAlwaysOnTop();Eo.setAlwaysOnTop(!1);'
+        'setTimeout(()=>{try{if(!Eo)return;let b=Eo.getContentBounds(),'
+        'p=i.screen.getCursorScreenPoint(),'
+        'mx=Math.max(0,Math.min(p.x-b.x,b.width-180)),'
+        'my=Math.max(0,Math.min(p.y-b.y,b.height-16));'
+        'Ao.popup({window:Eo,x:mx,y:my,callback:()=>{Eo&&w&&Eo.setAlwaysOnTop(!0)}}),'
+        'console.log("[memo] menu popped at "+mx+","+my+" wasOnTop="+w)}catch(x){'
+        'console.log("[memo] menu popup failed: "+x.message),Eo&&w&&Eo.setAlwaysOnTop(!0)}},120)'
+        '}catch(x){console.log("[memo] menu popup failed: "+x.message),'
+        'Eo&&Eo.setAlwaysOnTop(!0)}})())',
+        'MEMO_NEW',
+    ), (
+        # native.11 的中间版本：同步 popup + 关置顶
         '"rightclick"==e?(No=null,(()=>{try{let w=Eo&&Eo.isAlwaysOnTop();'
         'Eo&&Eo.setAlwaysOnTop(!1),'
         'Ao.popup({callback:()=>{Eo&&w&&Eo.setAlwaysOnTop(!0)}}),'
@@ -374,6 +399,13 @@ LEGACY = {
         '"rightclick"==e?(No=null,(()=>{try{if(!Eo){console.log("[memo] no memo window");return}global.__memoMenuAt=Date.now();let w=Eo.isAlwaysOnTop();Eo.setAlwaysOnTop(!1);setTimeout(()=>{try{if(!Eo)return;let b=Eo.getContentBounds(),p=i.screen.getCursorScreenPoint(),mx=Math.max(0,Math.min(p.x-b.x,b.width-180)),my=Math.max(0,Math.min(p.y-b.y,b.height-16));Ao.popup({window:Eo,x:mx,y:my,callback:()=>{Eo&&w&&Eo.setAlwaysOnTop(!0)}}),console.log("[memo] menu popped at "+mx+","+my+" wasOnTop="+w)}catch(x){console.log("[memo] menu popup failed: "+x.message),Eo&&w&&Eo.setAlwaysOnTop(!0)}},120)}catch(x){console.log("[memo] menu popup failed: "+x.message),Eo&&Eo.setAlwaysOnTop(!0)}})())',
         'MEMO_NEW',
     )],
+    'memo-context-menu': [(
+        # native.14 / native.15：只挂了自己的兜底监听，没摘掉 electron-context-menu
+        'Eo.on("closed",()=>{Eo=null}),Eo.loadURL(e),'
+        'Eo.webContents.on("context-menu",()=>{'
+        'console.log("[memo] webContents context-menu"),ko("rightclick")}),Io()}',
+        'CTX_NEW',
+    )],
     'tray-popup-pos': [(
         'getTrayPopupPosition(){let e=this.tray.getBounds();'
         '"linux"==process.platform&&(!e||0==e.width&&0==e.height)&&(()=>{'
@@ -385,13 +417,35 @@ LEGACY = {
     )],
 }
 
+# 字体统一：NAS 页面把根节点字体栈写成了全角逗号
+#   <div id="app" style='font-family: "Microsoft YaHei，Arial，Verdana，sans-serif";'>
+# 整串被 Chromium 当成一个字体名 → 西文落到 UA 默认的 Times New Roman（衬线），
+# 中文落到 Source Han Sans SC（黑体），同一个界面里中英文两种字型。
+# Windows/Wine 的 UA 默认字体恰好是无衬线的，所以官方没暴露这个问题。
+#
+# 修法：给每个 webContents 在 dom-ready 阶段注入 zs-fontfix.js —— 该脚本给
+# <html> 打统一字体栈，并把带全角逗号的 inline font-family 就地改写。
+# 只动 font-family，图标字体的元素不含全角逗号，不会被命中。
+FONT_PATCHES = [
+    ("font-unify",
+     'i.app.on("web-contents-created",(e,t)=>{t.setWindowOpenHandler(({url:e})=>{',
+     'i.app.on("web-contents-created",(e,t)=>{'
+     '"linux"==process.platform&&(()=>{let _zf;'
+     'try{_zf=require("fs").readFileSync(require("path").join(__dirname,"zs-fontfix.js"),"utf8")}'
+     'catch(x){return void console.log("[font] fixer unreadable: "+x.message)}'
+     't.on("dom-ready",()=>{t.executeJavaScript(_zf,!0)'
+     '.catch(x=>console.log("[font] inject failed: "+x.message))})})(),'
+     't.setWindowOpenHandler(({url:e})=>{'),
+]
+
+
 def apply_patches(tag, patches):
     src = open(BG, encoding='utf-8').read()
     changed = False
     results = []
     for name, old, new in patches:
         for lo, ln in LEGACY.get(name, []):
-            if ln in ('TRAY_NEW', 'MEMO_NEW', 'POPUP_NEW'):
+            if ln in ('TRAY_NEW', 'MEMO_NEW', 'POPUP_NEW', 'CTX_NEW'):
                 ln = new
             if lo in src and lo != ln:
                 src = src.replace(lo, ln, 1)
@@ -446,6 +500,18 @@ def strip_win32_bindings():
             os.remove(f)
             n += 1
     print(f'[bindings] removed {n} win32 .node (linux prebuilds remain)')
+
+
+def install_fontfix():
+    """渲染进程字体修正脚本，放在 background.js 旁边（__dirname 即 app 根）。"""
+    src = os.path.join(HERE, 'fontfix.js')
+    if not os.path.isfile(src):
+        print(f'[font] ERROR: {src} missing')
+        sys.exit(3)
+    dst = os.path.join(APP, 'zs-fontfix.js')
+    if os.path.abspath(src) != os.path.abspath(dst):
+        shutil.copyfile(src, dst)
+    print(f'[font] installed {dst} ({os.path.getsize(dst)} bytes)')
 
 
 def install_so():
@@ -514,7 +580,9 @@ if __name__ == '__main__':
     apply_patches('mount', MOUNT_PATCHES)
     apply_patches('tray', TRAY_PATCHES)
     apply_patches('keeplogin', KEEP_LOGIN_PATCHES)
+    apply_patches('font', FONT_PATCHES)
     strip_win32_bindings()
+    install_fontfix()
     install_so()
     install_player()
     install_sync()
