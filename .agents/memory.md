@@ -1844,3 +1844,18 @@
 - 验证：面板截图右上角叉清晰可见；点叉后面板关闭（截图 RMSE 19063）；自测 52/52。
 - 教训：`draw_center` 传的 size 是「整张图的最长边」，用按钮整图当小图标会
   缩得看不清。要么裁图，要么手绘。
+
+## 2026-11-18 打包 native.19（关闭叉修复）
+
+- 产物：`build/com.zspace.native.spark_2.46.2026101501+native.19-1_amd64.deb`
+  117,397,296 B；SHA256 `7f4481638e24e9fc042e9ffc6a36ac2cd706d1f2107610d68ad9aff148803b6e`；
+  自检 55 项全 PASS。包内播放器 `2c021fd6…` = 本机最新构建。
+- **并发第三次踩坑**：这次已经先用 `pgrep -f "^bash scripts/build_native_deb.sh"`
+  等到"无并发"才开跑，结果还是挂在 dpkg-deb 的 `tar: 无法 stat`。
+  原因是对方进程结束打包后还在**清理 412MB 的 build/native-work**，
+  我这边开始重建 stage 时被它删。等 60 秒不够。
+  正确判据不是「没有 build_native_deb 进程」，而是
+  「`build/native-work` 不再被改动」；或者干脆把打包串行化。
+  重跑一次（前台、留完整日志）就成功了 —— 说明脚本本身没问题。
+- 排查用的判据：`stage` 有 412MB、手动 `dpkg-deb --build` 能出包，
+  就说明不是 stage 内容问题，而是执行期被并发破坏。
