@@ -31,6 +31,7 @@
 # 1) 拉依赖（不进 git 的上游二进制）
 scripts/fetch_rclone.sh        # rclone 1.70.2
 scripts/fetch_syncthing.sh     # syncthing 1.27.7
+scripts/fetch_zspace_cli.sh    # 官方 Agent Toolkit 的 zspace-cli（只用不提交）
 
 # 2) 打 deb（载荷缺失时用假载荷，只验结构）
 scripts/build_native_deb.sh --rev 1

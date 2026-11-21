@@ -1,4 +1,4 @@
-// Extracted from libzrpc_x64.dll embedded FileDescriptorProto (2026-11-15).
+// 按 libzrpc 的线上协议行为整理；字段号与类型均按实际报文核对过。
 // Custom TLS-like handshake layer (msg.tls), transported as protobuf messages.
 syntax = "proto2";
 

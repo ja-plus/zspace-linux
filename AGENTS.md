@@ -95,6 +95,10 @@ bash selftest/run_selftest.sh  # 端到端 52 项，需要 DISPLAY
 - 不要把 `build/*.deb`、`native/work/`、`*.exe` 提交进 git（见 `.gitignore`）。
 - 不要为了让测试通过而放宽自检项；要么修代码，要么如实报告没过。
 - 不要在没问过用户的情况下下载大文件（>100 MB）。
+- **不要提交第三方二进制**（`zspace-cli`、rclone、syncthing 等）：仓库只留
+  `scripts/fetch_*.sh` 与校验和，产物落在 `native/work/`（gitignore）。
+- 公开这个仓库前先读 `native/player/assets/README.md` 的权利声明：
+  `assets/` 与 `packaging-native/icons/` 含原厂素材，**不能随之公开**。
 
 ## 5. 目录一览
 
@@ -114,7 +118,7 @@ zspace-linux/
 ├── scripts/
 │   ├── build_native_deb.sh
 │   ├── play_native.sh
-│   ├── fetch_rclone.sh  fetch_syncthing.sh
+│   ├── fetch_rclone.sh  fetch_syncthing.sh  fetch_zspace_cli.sh
 │   └── common.sh
 ├── build/               打包产物（不进 git）
 └── logs/                运行日志（不进 git）

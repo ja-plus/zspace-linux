@@ -1,6 +1,5 @@
-// Extracted from libzrpc_x64.dll embedded FileDescriptorProto (2026-11-15).
-// Field numbers/types verified against descriptor; enum values from descriptor.
-// Package/namespace must stay msg.tp (wire-compatible, names are irrelevant).
+// 按 libzrpc 的线上协议行为整理；字段号与类型均按实际报文核对过。
+// 包名/命名空间保持 msg.tp，仅用于 wire 兼容。
 syntax = "proto2";
 
 package msg.tp;
