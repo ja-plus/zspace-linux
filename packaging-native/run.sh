@@ -32,7 +32,7 @@ export no_proxy="localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 export NO_PROXY="$no_proxy"
 
 # 默认不要追加 Chromium 开关：应用会把多余命令行参数当成“待上传文件”，
-# 下次启动弹上传框（见 .agents/workflow.md §3.8）。
+# 下次启动弹上传框（详见 .agents/memory.md 里 2026-11 的相关记录）。
 # 调试时显式开：ZSPACE_NATIVE_ARGS="--remote-debugging-port=9222" run.sh
 # shellcheck disable=SC2086
 exec "$ELECTRON_BIN" "$APP_DIR" ${ZSPACE_NATIVE_ARGS:-} "$@"
