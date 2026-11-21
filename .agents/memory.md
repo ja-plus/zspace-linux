@@ -2095,3 +2095,17 @@ Bash 调用里。
   `cargo test` 11/11、`selftest` 52/52，控制栏图标逐个确认正常。
 - 提醒：`include_bytes!` 是编译期的，删多一个就直接编译失败，所以
   "能编译通过"本身就是素材齐全的证明。
+
+## 2026-11-21 仓库转为公开
+
+- `ja-plus/zspace-linux` 已从 private 改为 **public**（`gh repo edit --visibility public`；
+  gh 2.46 没有 `--accept-visibility-change-consequences` 这个新参数，直接传 visibility 即可）。
+  匿名访问复核：`curl https://github.com/ja-plus/zspace-linux` → HTTP 200，标题正确。
+- 公开前的扫描结果：0 个邮箱、0 个 token/私钥、0 处 `/home/japlus` 个人路径、
+  0 个构建产物误入。
+- 公开时仓库内容：225 文件 / 46 提交 / `.git` 1.1 MB；历史里图标对象 22 个。
+- **仍然公开着原厂素材**：`native/player/assets/icons/controlbar/` 22 个图标
+  （21 KB）与 `packaging-native/icons/` 5 个 logo。这是用户知情后保留的决定，
+  后续若要彻底干净，按 `assets/README.md` 的说明删目录或换自绘。
+- 之后写提交信息时注意：这个仓库已经是公开仓库，**不要**把内网地址、
+  账号、抓包原文之类写进 commit message 或文档。
