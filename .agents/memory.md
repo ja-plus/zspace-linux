@@ -2052,3 +2052,30 @@ Bash 调用里。
   与日志/清理辅助函数。
 - Wine 版继续在 `ja-plus/zspace-wine` 维护，两个包名不同可并存：
   `com.zspace.native.spark` / `com.zspace.spark`。
+
+## 2026-11-21 公开前的风险清理（历史重写）
+
+用户决定：**图标和 logo 保留不换**，其余按清单整改。做完的事：
+
+- **第三方二进制出库**：删掉 `native/research-remote/zspace-cli`（6.7 MB，
+  官方 Agent Toolkit 的 linux-x64 产物，sha256 `97ed9ea7…` 与官方 manifest 一致）
+  和 `skill.zip`（348 KB，与已解包的 toolkit 目录 121 个文件完全重复）。
+  新增 `scripts/fetch_zspace_cli.sh`：按 `runtime-artifacts.json` 的版本与
+  sha256 下到 `native/work/zspace-cli/`，校验不过就失败退出。
+- **历史重写**：这两个文件从**全部 44 个提交**里剔除
+  （`git filter-branch --index-filter 'git rm --cached'` + 删 `refs/original`
+  + `reflog expire` + `gc --prune=now`），`.git` 从 9.6 MB 降到 2.8 MB。
+  远端已 force push（`9d743b6…` → `a568ffe…`）；用 `git clone --mirror` 复核：
+  远端无残留、无 >6 MB 对象。**旧提交号全部变了，之前记的 SHA 作废。**
+- **proto 注释去自认**：`message.tp.proto` / `message.tls.proto` 头部原写
+  "Extracted from libzrpc_x64.dll embedded FileDescriptorProto"，
+  改成"按 libzrpc 的线上协议行为整理；字段号与类型均按实际报文核对过"。
+- **assets/README.md 改成权利声明**：保留"素材版权归原厂、仅限个人本地构建、
+  不得再分发"，给出 fork 时的处理方式（删目录 → 播放器退回矢量绘制，
+  或按 80×80@2x 三态规格自绘）；删掉了原来的提取命令、版本号、DP 对齐推导。
+- AGENTS.md 新增两条：不提交第三方二进制；公开前先看 assets 权利声明。
+
+**仍然存在、且用户明确保留的暴露面**（公开前必须知道）：
+`native/player/assets/`（224 张官方图标 + `official.qss` + `background.jpg`，2.5 MB）
+与 `packaging-native/icons/`（5 个官方 logo）。这两个目录只要随仓库公开，
+"复制官方美术资源"这条就成立，与其它整改无关。
