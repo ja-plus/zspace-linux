@@ -2032,3 +2032,23 @@ Bash 调用里。
   = 本机 `target/release`，确认这一轮的 66px 控制栏、320x360 弹层、
   720x490 设置面板都在包里。
 - 这次没有并发冲突（打包前 pgrep 只匹配到自己的 shell）。
+
+## 2026-11-21 从 zspace-wine 拆出独立仓库 zspace-linux
+
+- 新仓库 <https://github.com/ja-plus/zspace-linux>，从 `zspace-wine` 的
+  `research/linux-native-re`（40 个提交）拉出，分支改名 `main`，历史完整保留。
+- 本仓库只留原生部分：`native/`、`packaging-native/`、`docs/`、
+  `scripts/{build_native_deb,play_native,common,fetch_*}.sh`、`REPORT-linux-native-re.md`。
+- 移除：`packaging/`（Wine 静态素材）、`scripts/{build_deb,check_update,download,
+  selftest_wineserver}.sh`、`packages/`、`.qoder/`、
+  `.agents/{workflow,checklist}.md`（Wine 专用流程，留在 zspace-wine）。
+- **拆分时踩到的坑**：`build_native_deb.sh` 的图标是从
+  `packaging/icons/hicolor` 取的（A12 检查），删掉 Wine 目录后假载荷打包
+  直接 `FAIL A12 图标随包`。已把 5 个尺寸的图标搬进
+  `packaging-native/icons/hicolor/` 并改 `ICON_SRC`，现在 `--fake` 全过。
+  → 以后动仓库结构，先跑一次 `build_native_deb.sh --fake` 冒烟。
+- `scripts/common.sh` 也顺手清掉 Wine 遗留（`PKG_DIR`、`local_package`、
+  `version_gt`、官方 Windows 升级接口常量），保留 `ROOT/BUILD_DIR/LOG_DIR`
+  与日志/清理辅助函数。
+- Wine 版继续在 `ja-plus/zspace-wine` 维护，两个包名不同可并存：
+  `com.zspace.native.spark` / `com.zspace.spark`。

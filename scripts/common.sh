@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 极空间 Wine 打包项目 —— 公共函数
+# 极空间 Linux 原生版 —— 公共函数
 # 所有脚本 source 本文件，不要在脚本之间重复定义。
 
 set -euo pipefail
@@ -7,18 +7,12 @@ set -euo pipefail
 # 项目根目录（scripts/ 的上一级）
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="$ROOT/.state"
-PKG_DIR="$ROOT/packages"
 BUILD_DIR="$ROOT/build"
 LOG_DIR="$ROOT/logs"
 PACK_DIR="$ROOT/packaging"
 
-mkdir -p "$STATE_DIR" "$PKG_DIR" "$BUILD_DIR" "$LOG_DIR"
+mkdir -p "$STATE_DIR" "$BUILD_DIR" "$LOG_DIR"
 
-# ── 官方接口（来源见 .agents/sources.md）────────────────────────
-API_BASE="https://upgrade.zenithspace.net/upgrade_server/v2/check_upgrade"
-APP_ID="APP_ZSPACE_DESKTOP_WIN"
-CHANNEL="zspace"
-# Win7 兼容版另有 APP_ZSPACE_DESKTOP_WIN7，本项目默认不做
 
 # ── 输出 ────────────────────────────────────────────────────────
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -39,36 +33,8 @@ need() {
 }
 
 # ── 版本比较：V2.46.2026101501 → 逐段数值比较 ──────────────────
-# 用法：version_gt A B   （A > B 时返回 0）
-version_gt() {
-    python3 - "$1" "$2" <<'PY'
-import sys
-def norm(v):
-    v = v.lstrip('Vv')
-    return [int(x) if x.isdigit() else 0 for x in v.split('.')]
-a, b = norm(sys.argv[1]), norm(sys.argv[2])
-n = max(len(a), len(b))
-a += [0]*(n-len(a)); b += [0]*(n-len(b))
-sys.exit(0 if a > b else 1)
-PY
-}
 
 # ── 本地已有的安装包 ───────────────────────────────────────────
-# 打印「版本|文件名」，多份时取版本最高的一份；没有则非零退出
-local_package() {
-    local best="" bestv="" f v
-    shopt -s nullglob
-    for f in "$PKG_DIR"/*.exe; do
-        v="$(basename "$f" | sed -nE 's/^zspace_windows_([0-9][0-9.]*)_[0-9]+\.exe$/\1/p')"
-        [ -z "$v" ] && v="$(basename "$f" .exe)"
-        if [ -z "$bestv" ] || version_gt "$v" "$bestv"; then
-            bestv="$v"; best="$f"
-        fi
-    done
-    shopt -u nullglob
-    [ -n "$best" ] || return 1
-    printf '%s|%s\n' "$bestv" "$best"
-}
 
 human_size() {
     python3 - "$1" <<'PY'

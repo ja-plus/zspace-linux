@@ -1,103 +1,66 @@
-# zspace-wine
+# zspace-linux
 
-把**极空间 Windows 客户端**打成 Linux deb，用 deepin-wine 跑起来。
-官方出新版时，一条命令下载 + 一条命令重新打包。
+极空间私有云的 **Linux 原生客户端**：不依赖 Wine，用官方 Electron 载荷
++ 自研 RPC 桥 + 自研原生播放器，打成符合星火规范的 deb。
 
-> **这个项目推荐交给 AI Agent 维护。**
-> 目录里有 `AGENTS.md`（Agent 的行为契约）和 `.agents/`（规则、流程、清单、记忆）。
-> 用支持 AGENTS.md 的 Agent 打开本目录，它会自动接手"查新版 → 问你要不要下 → 打包 → 自检"这一整套。
-> 你自己只需要做决定，不用记命令。
-
----
-
-## 你需要知道的三件事
-
-1. **本项目只做包装，不改官方的东西。**
-   安装包来自极空间官网，deb 里装的就是官方原始二进制。
-2. **产物只供个人使用。**
-   官方用户协议可能不允许再分发；要公开发布请先自行确认授权。
-3. **打包脚本自带体检。**
-   包结构、启动器、中文字体修正、上架红线……任何一项不过都不会产出 deb。
+> 这是从 [zspace-wine](https://github.com/ja-plus/zspace-wine) 拆出来的独立仓库。
+> 那边只管 **Wine 版打包**（把官方 Windows 客户端用 Wine 跑起来），
+> 这边只管 **原生实现**，两者包名不同、可以同时安装。
 
 ---
 
-## 如果你想自己动手
+## 组成
 
-```bash
-# 1. 看看官方有没有新版（一天只查一次接口）
-scripts/check_update.sh
-
-# 2. 下载最新安装包到 packages/
-scripts/download.sh
-#    手动下载的也行：scripts/download.sh --file ~/下载/xxx.exe
-
-# 3. 打包
-scripts/build_deb.sh
-
-# 4. 装
-sudo apt install ./build/com.zspace.spark_<版本>-<修订>_amd64.deb
-```
-
-首次启动会自动初始化 Wine 容器（约 1 分钟），之后启动约 5–10 秒。
-
----
-
-## 如果你交给 AI Agent
-
-打开目录后 Agent 会：
-
-- **第一次对话前**就去查官方版本；
-- 本地没有安装包 → 问你要不要下载；
-- 本地有包但官方出新版了 → 问你要不要下载（**每天最多问一次**）；
-- 你说"打包" → 如果有新版会先问你用旧包还是新包；
-- 打包结束后**逐项跑验收清单**，不通过就不算完成，并把结果记进 `.agents/memory.md`。
-
-细节见 [`AGENTS.md`](AGENTS.md)。
-
----
-
-## 目录
-
-| 路径 | 说明 |
+| 目录 / 脚本 | 作用 |
 |---|---|
-| `AGENTS.md` | Agent 的行为契约，必读 |
-| `.agents/` | Agent 参考资料：记忆、流程、验收清单、官方接口 |
-| `scripts/` | 三个脚本：查版本 / 下载 / 打包 |
-| `packaging/` | deb 的静态素材（启动器、postinst、图标…） |
-| `packages/` | 安装包存放（不进 git） |
-| `build/` | 打包产物（不进 git） |
-| `.state/` | 版本检查缓存（不进 git） |
+| `native/work/` | 载荷工作区：`electron/dist`（Electron 运行时）、`app/extracted`（官方 app.asar 解包 + Linux 补丁）。**不进 git** |
+| `native/libzrpc/` | 替代官方 `libzrpc.dll` 的 Linux 实现（Rust 动态库） |
+| `native/player/` | 播放器 `zspace-player`：**Rust + cairo 自绘 UI**，libvlc 3 后端，顶替官方 `UZPlayer.exe`；命令行、TCP 帧协议、上下行消息与原版对齐 |
+| `native/mount/` | 挂载线（mountV2）的 monitor，配合 rclone 挂云盘 |
+| `native/sync/` | 同步线，配合 syncthing |
+| `native/proto/` `native/patches/` `native/test/` | 协议样本、官方文件补丁、联调脚本 |
+| `packaging-native/` | deb 静态素材：control / desktop / 启动器 / postinst / postrm / 图标 |
+| `scripts/build_native_deb.sh` | 打 deb + 全套自检 |
+| `scripts/play_native.sh` | 不装包，直接用原生播放器播当前视频（走 VA-API 硬解） |
+| `docs/` | 播放器协议对照、官方实现结构、Windows 版 UI 实测基线 |
+| `.agents/memory.md` | 跨会话记忆：做过的决定、产物记录、踩过的坑 |
 
-## 依赖
-
-**构建**：`7z`、`dpkg-deb`、`curl`、`python3`、`xz`
-
-**运行**：任意 Wine。Deepin/UOS 上优先用 `deepin-wine10-stable`（中文/输入法兼容性最好），
-其它发行版用自带的 wine 也可以：
-
-```
-Depends: deepin-wine10-stable | deepin-wine11-stable | deepin-wine8-stable
-       | deepin-wine | wine64 | wine | wine-stable
-```
-
-apt 会从左往右挑第一个装得上的，Deepin 行为不变。
-想强制指定运行时：`WINE=wine-stable /opt/durapps/com.zspace.spark/files/run.sh`。
-
-**发行版兼容性**：包本身是标准 amd64 deb，任何发行版都能装；
-`/opt/durapps/`、`.spark` 后缀、`postrm` 清容器这些是星火约定，装到别处无害。
-没有微软雅黑的发行版上会自动跳过字体修正、回落到自带 CJK，观感略不同属预期。
-
-## 已知限制
-
-- 设备发现、外网穿透、同步、盘符挂载、原生播放器在 Wine 下不可用
- （客户端依赖的 `libzrpc_x64.dll` 只有 Win/mac 版本）。
-- IP 直连（端口 5055）可用，日常够用。
-- 透明窗口（托盘弹窗、桌面歌词）在 Wine 下是黑底，属于 Wine 缺 DWM 合成，无解。
-
-## 卸载
+## 快速开始
 
 ```bash
-sudo apt remove com.zspace.spark
+# 1) 拉依赖（不进 git 的上游二进制）
+scripts/fetch_rclone.sh        # rclone 1.70.2
+scripts/fetch_syncthing.sh     # syncthing 1.27.7
+
+# 2) 打 deb（载荷缺失时用假载荷，只验结构）
+scripts/build_native_deb.sh --rev 1
+
+# 3) 装
+sudo dpkg -i build/com.zspace.native.spark_2.46.2026101501+native.1-1_amd64.deb
 ```
 
-`postrm` 会清掉 `~/.deepinwine/com.zspace.spark`。
+`build_native_deb.sh` 自带体检：包结构、desktop 名、启动器、依赖、图标、
+无 setuid、启动器清理代理变量……**任何一项不过都不会留下可用产物**。
+
+## 和 Wine 版的关系
+
+| | 本仓库 | zspace-wine |
+|---|---|---|
+| 包名 | `com.zspace.native.spark` | `com.zspace.spark` |
+| 运行时 | Electron（Linux 原生） | deepin-wine / wine |
+| 播放器 | `zspace-player`（Rust + libvlc） | 官方 `UZPlayer.exe` |
+| 安装目录 | `/opt/durapps/com.zspace.native.spark` | `/opt/durapps/com.zspace.spark` |
+
+两者可以并存安装，互不影响。
+
+## 当前状态（native.23）
+
+- 客户端主体：登录、文件列表、上传下载、挂载、同步均已接通
+- 播放器：控制栏 / 弹层 / 设置面板按 Windows 版**真机逐像素实测**重排
+  （见 `docs/WINDOWS-UI-MEASURED.md`），`selftest` 52/52
+- 未完成：画面调节、字幕样式面板、在线字幕搜索、直播、360、小窗
+
+## 免责
+
+本仓库是**个人自用**构建：改动了官方二进制与配置，不投稿星火商店，
+也不得公开分发。官方用户协议可能不允许再分发，公开发布前请自行确认授权。

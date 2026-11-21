@@ -214,7 +214,7 @@ install -m 0644 "$ASSET_DIR/com.zspace.native.spark.desktop" \
     "$STAGE/usr/share/applications/$PKG.desktop"
 install -m 0644 "$ASSET_DIR/README-doc.md" "$STAGE/usr/share/doc/$PKG/README.md"
 
-ICON_SRC="$ROOT/packaging/icons/hicolor"
+ICON_SRC="$ROOT/packaging-native/icons/hicolor"
 for size in 24 32 48 64 256; do
     src="$ICON_SRC/${size}x${size}/apps/com.zspace.spark.png"
     dst="$STAGE/usr/share/icons/hicolor/${size}x${size}/apps/$PKG.png"
