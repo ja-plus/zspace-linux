@@ -2079,3 +2079,19 @@ Bash 调用里。
 `native/player/assets/`（224 张官方图标 + `official.qss` + `background.jpg`，2.5 MB）
 与 `packaging-native/icons/`（5 个官方 logo）。这两个目录只要随仓库公开，
 "复制官方美术资源"这条就成立，与其它整改无关。
+
+## 2026-11-21 删除未使用的播放器素材（224 → 22 张）
+
+按代码引用情况清了一遍 `native/player/assets/`：
+
+- 注册表 `icons![]` 35 条 → 33 个唯一文件；其中**代码真正引用 22 个**
+  （prev/next/episode/slider_handle/close/popup_close 注册了但没画——
+  控制栏改版后没有这些按钮，关闭叉改手绘）。
+- 224 张 PNG 里 **191 张连编译都没进**（`include_bytes!` 只打包注册过的），
+  另有 `background.jpg`(1.4 MB)、6 个 SVG、1 个 `.qm` 完全没引用。
+- 执行：`git rm` 掉 210 个文件（保留 22 个 controlbar 图标），
+  `style.rs` 同步删掉 13 条注册项，`icons_load` 测试的键名改成仍在用的。
+- 结果：`assets/` 1.7 MB → 124 KB；二进制 1,168,328 → 1,157,160 B；
+  `cargo test` 11/11、`selftest` 52/52，控制栏图标逐个确认正常。
+- 提醒：`include_bytes!` 是编译期的，删多一个就直接编译失败，所以
+  "能编译通过"本身就是素材齐全的证明。

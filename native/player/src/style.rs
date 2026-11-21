@@ -77,18 +77,10 @@ icons![
     ("rewind_hover", "controlbar/rewindHover2x.png"),
     ("forward", "controlbar/fastForward2x.png"),
     ("forward_hover", "controlbar/fastForwardHover2x.png"),
-    ("prev", "controlbar/previousVideoWhite2x.png"),
-    ("prev_hover", "controlbar/previousVideoHoverWhite2x.png"),
-    ("prev_off", "controlbar/previousVideoWhiteDisable2x.png"),
-    ("next", "controlbar/nextVideoWhite2x.png"),
-    ("next_hover", "controlbar/nextVideoHoverWhite2x.png"),
-    ("next_off", "controlbar/nextVideoWhiteDisable2x.png"),
     ("subtitle", "controlbar/subtitleWhite2x.png"),
     ("subtitle_hover", "controlbar/subtitleHoverWhite2x.png"),
     ("audio", "controlbar/audioTrackWhite2x.png"),
     ("audio_hover", "controlbar/audioTrackHoverWhite2x.png"),
-    ("episode", "controlbar/episodesWhite2x.png"),
-    ("episode_hover", "controlbar/episodesHoverWhite2x.png"),
     ("volume", "controlbar/volumeWhite2x.png"),
     ("volume_hover", "controlbar/volumeHoverWhite2x.png"),
     ("mute", "controlbar/muteWhite2x.png"),
@@ -99,15 +91,6 @@ icons![
     ("exit_full_hover", "controlbar/exitFullScreenHoverWhite2x.png"),
     ("more", "controlbar/moreWhite2x.png"),
     ("more_hover", "controlbar/moreHoverWhite2x.png"),
-    ("slider_handle", "controlbar/sliderbtn2x.png"),
-    ("close", "titlebar/winClose2x.png"),
-    ("close_hover", "titlebar/winCloseHover2x.png"),
-    // 弹层标题栏右侧的关闭叉。
-    // 官方用的是 popup/popupClose2x.png，但 popup 目录那一段的「块↔名字」
-    // 对齐还没校准（提取出来的 popupClose2x 实际是下箭头），
-    // 这里先改用已验证正确的标题栏关闭图。
-    ("popup_close", "titlebar/winClose2x.png"),
-    ("popup_close_hover", "titlebar/winCloseHover2x.png"),
 ];
 
 pub struct IconSet {
@@ -230,7 +213,7 @@ mod tests {
     fn icons_load() {
         let icons = IconSet::load();
         assert_eq!(icons.len(), ICON_SOURCES.len(), "有图标没加载上");
-        for key in ["play", "pause", "volume", "slider_handle", "more"] {
+        for key in ["play", "pause", "volume", "subtitle", "audio", "full", "more"] {
             assert!(icons.has(key), "{key} 缺失");
         }
     }

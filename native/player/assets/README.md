@@ -17,19 +17,20 @@
 
 ## 内容
 
-| 路径 | 说明 |
+只保留播放器**实际绘制**的 22 个图标，全部在 `icons/controlbar/`：
+
+| 键 | 文件 |
 |---|---|
-| `official.qss` | 播放器样式规则汇总（颜色、圆角、字号的原值出处） |
-| `icons/controlbar/` | 底部控制栏图标，80×80 的 2x 资源，含三态 |
-| `icons/titlebar/` | 标题栏图标（置顶、信息、最小化/最大化/关闭） |
-| `icons/<其它目录>/` | 弹层、加载、引导、选集、字幕设置等 15 个目录 |
-| `icons/*.png` | 散图（背景、滑块、加载帧、倍速面板底图） |
+| play / pause | `playWhite2x.png` `pauseWhite2x.png`（+ Hover） |
+| rewind / forward | `rewind2x.png` `fastForward2x.png`（+ Hover） |
+| subtitle | `subtitleWhite2x.png`（+ Hover） |
+| audio | `audioTrackWhite2x.png`（+ Hover） |
+| volume / mute | `volumeWhite2x.png` `muteWhite2x.png`（+ Hover） |
+| full / exit_full | `fullScreenWhite2x.png` `exitFullScreenWhite2x.png`（+ Hover） |
+| more（齿轮） | `moreWhite2x.png`（+ Hover） |
 
-`icons/*.qm` 是官方翻译文件，播放器不使用，仅作将来做多语言时的对照。
+`official.qss` 是样式**取值**的出处（颜色、圆角、字号），不参与编译。
 
-## 文件名是怎么来的
-
-`qres` 头在这个 exe 里被裁掉了，资源只剩名字表和按序排列的数据块两块裸数据，
-两者的对应关系靠**类型一致性 + 保序对齐**恢复（脚本见 `../tools/`）。
-落地时逐张按图标语义复核过（播放三角、蓝光圆盘、红底关闭叉等），
-所以 `icons/` 下的文件名可以直接当用途用。
+> 2026-11-21：原目录里有 224 张 PNG + 1 张背景 JPG + 6 个 SVG + 1 个 `.qm`，
+> 但代码只引用 22 张（其余属于选集/字幕设置/引导/加载/标题栏等尚未实现的界面，
+> 以及被手绘替代的关闭叉）。未使用的 210 个文件已删除，画面无变化。
